@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ขอเบิกวัสดุ/ใช้รถ</title>
+
+<!-- LIFF SDK -->
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+<style>
+  :root {
+    --primary: #06c755;
+    --primary-dark: #05a648;
+    --bg: #f4f6f5;
+    --card: #ffffff;
+    --border: #dfe3e0;
+    --text: #1c1c1c;
+    --text-muted: #6b7280;
+    --error: #d64545;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Sarabun", -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding-bottom: 40px;
+  }
+  header {
+    background: var(--primary);
+    color: white;
+    padding: 18px 20px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  header p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    opacity: 0.9;
+  }
+  #profile-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  #profile-bar img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+  }
+  form {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .field {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+  }
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .field label .required {
+    color: var(--error);
+  }
+  select, input, textarea {
+    width: 100%;
+    border: none;
+    font-size: 16px;
+    font-family: inherit;
+    color: var(--text);
+    background: transparent;
+    outline: none;
+    padding: 4px 0;
+  }
+  textarea {
+    resize: vertical;
+    min-height: 60px;
+  }
+  .row {
+    display: flex;
+    gap: 10px;
+  }
+  .row .field {
+    flex: 1;
+  }
+  #other-hnagan, #other-wasadu, #other-source {
+    display: none;
+    margin-top: 8px;
+    border-top: 1px dashed var(--border);
+    padding-top: 8px;
+  }
+  button[type="submit"] {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 16px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  button[type="submit"]:active {
+    background: var(--primary-dark);
+  }
+  button[type="submit"]:disabled {
+    opacity: 0.6;
+  }
+  #status-msg {
+    text-align: center;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    display: none;
+  }
+  #status-msg.success {
+    display: block;
+    background: #e6f9ee;
+    color: var(--primary-dark);
+  }
+  #status-msg.error {
+    display: block;
+    background: #fdecec;
+    color: var(--error);
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ขอเบิกวัสดุ / ขอใช้รถ</h1>
+  <p>กรอกครั้งเดียว ข้อมูลเข้าระบบทันที ไม่ต้องถ่ายรูปส่งอีกต่อไป</p>
+</header>
+
+<div id="profile-bar">
+  <span id="loading-profile">กำลังโหลดข้อมูลผู้ใช้...</span>
+</div>
+
+<form id="request-form">
+
+  <div class="field">
+    <label>ผู้ขอเบิก <span class="required">*</span></label>
+    <select id="requester" required>
+      <option value="">-- เลือกชื่อ --</option>
+      <option value="ช่างจอร์น - สรชัย">ช่างจอร์น - สรชัย</option>
+      <option value="ช่างหน่อย">ช่างหน่อย</option>
+      <option value="ช่างเบล - อนาวิล">ช่างเบล - อนาวิล</option>
+      <option value="ช่างมนูญศิริ">ช่างมนูญศิริ</option>
+      <option value="ช่างใจ">ช่างใจ</option>
+      <option value="ช่างแบงค์">ช่างแบงค์</option>
+      <option value="ช่างตี๋">ช่างตี๋</option>
+      <option value="ช่างเนส">ช่างเนส</option>
+      <option value="ช่างอาร์ต">ช่างอาร์ต</option>
+      <option value="ช่างออม">ช่างออม</option>
+      <option value="__other__">อื่นๆ (พิมพ์เอง)</option>
+    </select>
+    <div id="other-requester" style="display:none; margin-top:8px;">
+      <input type="text" id="requester-other-input" placeholder="พิมพ์ชื่อผู้ขอเบิก">
+    </div>
+    <div class="hint">ระบบจะเติมชื่อ LINE ของคุณให้อัตโนมัติ เลือก/แก้ไขได้ตามจริง</div>
+  </div>
+
+  <div class="field">
+    <label>รหัส/ชื่อหน้างาน <span class="required">*</span></label>
+    <select id="site-select" required>
+      <option value="">-- เลือกหน้างาน --</option>
+      <option value="__other__">งานใหม่ / ไม่อยู่ในรายการ (พิมพ์เอง)</option>
+    </select>
+    <div id="other-hnagan">
+      <input type="text" id="site-other-input" placeholder="เช่น TRC.68/12 - ถนนคอนกรีต ม.5 ต.นาบ่อคำ">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>วันเริ่มงานที่ต้องการรถ <span class="required">*</span></label>
+      <input type="date" id="start-date" required>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>วัสดุ <span class="required">*</span></label>
+    <select id="material" required>
+      <option value="">-- เลือกวัสดุ --</option>
+      <option value="ดิน">ดิน</option>
+      <option value="ลูกรัง">ลูกรัง</option>
+      <option value="ทรายหยาบ">ทรายหยาบ</option>
+      <option value="ทรายถม">ทรายถม</option>
+      <option value="หินใหญ่">หินใหญ่</option>
+      <option value="หินลิปแลป">หินลิปแลป</option>
+      <option value="หินคลุก">หินคลุก</option>
+      <option value="หินฝุ่น">หินฝุ่น</option>
+      <option value="กรวด">กรวด</option>
+      <option value="ยาง Hot Mix">ยาง Hot Mix</option>
+      <option value="เศษวัสดุ (ขนทิ้ง)">เศษวัสดุ (ขนทิ้ง)</option>
+      <option value="__other__">อื่นๆ (พิมพ์เอง)</option>
+    </select>
+    <div id="other-wasadu">
+      <input type="text" id="material-other-input" placeholder="พิมพ์ชื่อวัสดุ">
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>ปริมาณ <span class="required">*</span></label>
+      <input type="number" id="quantity" min="0" step="0.1" required>
+    </div>
+    <div class="field">
+      <label>หน่วย <span class="required">*</span></label>
+      <select id="unit" required>
+        <option value="">-- เลือก --</option>
+        <option value="เที่ยว">เที่ยว</option>
+        <option value="พ่วง">พ่วง</option>
+        <option value="ตัน">ตัน</option>
+        <option value="คัน">คัน</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>จำนวนคัน (ถ้าทราบ)</label>
+    <input type="number" id="truck-count" min="0" step="1">
+  </div>
+
+  <div class="field">
+    <label>แหล่งวัสดุ</label>
+    <select id="source">
+      <option value="">-- เลือกแหล่งวัสดุ --</option>
+      <option value="หน้างาน">หน้างาน</option>
+      <option value="SWL - สุวลี">SWL - สุวลี</option>
+      <option value="TRS - กำแพงเพชร">TRS - กำแพงเพชร</option>
+      <option value="ท่าทรายแม่น้ำปิง">ท่าทรายแม่น้ำปิง</option>
+      <option value="ท่าทรายกุ่ยหลีฮง">ท่าทรายกุ่ยหลีฮง</option>
+      <option value="TRC - หนองปลิง">TRC - หนองปลิง</option>
+      <option value="บ่อลูกรัง - บึงสามพัน">บ่อลูกรัง - บึงสามพัน</option>
+      <option value="ศุภกิจ - แพล้นยาง">ศุภกิจ - แพล้นยาง</option>
+      <option value="__other__">อื่นๆ (พิมพ์เอง)</option>
+    </select>
+    <div id="other-source">
+      <input type="text" id="source-other-input" placeholder="พิมพ์แหล่งวัสดุ">
+    </div>
+  </div>
+
+  <div class="field">
+    <label>ระยะทาง (กม.) โดยประมาณ</label>
+    <input type="number" id="distance" min="0" step="0.1">
+  </div>
+
+  <div class="field">
+    <label>รายละเอียดงาน / หมายเหตุ</label>
+    <textarea id="detail" placeholder="เช่น ทอยหินกองสต๊อกหน้างาน, เสริมทรายจุดที่ยุบ ฯลฯ"></textarea>
+  </div>
+
+  <div class="field">
+    <label>เบอร์ติดต่อหน้างาน</label>
+    <input type="tel" id="phone" placeholder="เช่น 081-3904854">
+  </div>
+
+  <div id="status-msg"></div>
+
+  <button type="submit" id="submit-btn">ส่งคำขอ</button>
+</form>
+
+<script>
+  // ============ ตั้งค่าที่ต้องแก้ก่อนใช้งานจริง ============
+  const LIFF_ID = "YOUR_LIFF_ID_HERE"; // ได้จาก LINE Developers Console > LIFF tab
+  const APPS_SCRIPT_URL = "YOUR_APPS_SCRIPT_WEB_APP_URL_HERE"; // ได้จากตอน Deploy Apps Script
+  // ตัวอย่างหน้างานที่เปิดอยู่ตอนนี้ - ควรอัปเดตให้ตรงกับงานจริง หรือให้ดึงจาก Sheet แบบไดนามิกในเวอร์ชันถัดไป
+  const ACTIVE_SITES = [
+    "TRC.67/49 - ถนนคอนกรีตสายบ้านน้ำดิบ-บ้านลานเพชร",
+    "SP.67/09 - เขื่อนกันตลิ่ง ม.2 ต.หนองปลิง",
+    "SP.66/06 - เขื่อนกันตลิ่งริมแม่น้ำปิงหมู่ 5 ต.โกสัมพี",
+    "SM.67/24 - ถนนคอนกรีตเสริมเหล็ก ม.10 บ้านหนองทราย"
+  ];
+  // ==========================================================
+
+  let lineProfile = null;
+
+  function populateSites() {
+    const select = document.getElementById('site-select');
+    ACTIVE_SITES.forEach(site => {
+      const opt = document.createElement('option');
+      opt.value = site;
+      opt.textContent = site;
+      select.insertBefore(opt, select.lastElementChild);
+    });
+  }
+
+  function toggleOther(selectId, otherBoxId) {
+    const select = document.getElementById(selectId);
+    const box = document.getElementById(otherBoxId);
+    select.addEventListener('change', () => {
+      box.style.display = select.value === '__other__' ? 'block' : 'none';
+    });
+  }
+
+  async function initLiff() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+      lineProfile = await liff.getProfile();
+      const bar = document.getElementById('profile-bar');
+      bar.innerHTML = `
+        <img src="${lineProfile.pictureUrl || ''}" onerror="this.style.display='none'">
+        <span>เข้าสู่ระบบเป็น: <strong>${lineProfile.displayName}</strong></span>
+      `;
+    } catch (err) {
+      document.getElementById('profile-bar').innerHTML =
+        '<span style="color:#d64545">โหลดโปรไฟล์ LINE ไม่สำเร็จ (เปิดนอกแอป LINE หรือยังไม่ได้ตั้งค่า LIFF_ID)</span>';
+    }
+  }
+
+  function getValue(selectId, otherInputId) {
+    const select = document.getElementById(selectId);
+    if (select.value === '__other__') {
+      return document.getElementById(otherInputId).value.trim();
+    }
+    return select.value;
+  }
+
+  document.getElementById('request-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    const statusMsg = document.getElementById('status-msg');
+    btn.disabled = true;
+    btn.textContent = 'กำลังส่ง...';
+    statusMsg.className = '';
+    statusMsg.style.display = 'none';
+
+    const payload = {
+      requester: getValue('requester', 'requester-other-input') || (lineProfile ? lineProfile.displayName : ''),
+      site: getValue('site-select', 'site-other-input'),
+      startDate: document.getElementById('start-date').value,
+      material: getValue('material', 'material-other-input'),
+      quantity: document.getElementById('quantity').value,
+      unit: document.getElementById('unit').value,
+      truckCount: document.getElementById('truck-count').value,
+      source: getValue('source', 'source-other-input'),
+      distanceKm: document.getElementById('distance').value,
+      detail: document.getElementById('detail').value,
+      phone: document.getElementById('phone').value,
+      lineUserId: lineProfile ? lineProfile.userId : '',
+      lineDisplayName: lineProfile ? lineProfile.displayName : '',
+      channel: 'LIFF'
+    };
+
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // เลี่ยง CORS preflight ของ Apps Script
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+
+      if (result.status === 'ok') {
+        statusMsg.textContent = 'ส่งคำขอสำเร็จแล้ว ระบบบันทึกข้อมูลเรียบร้อย';
+        statusMsg.className = 'success';
+        document.getElementById('request-form').reset();
+        setTimeout(() => {
+          if (liff.isInClient()) liff.closeWindow();
+        }, 1800);
+      } else {
+        throw new Error(result.message || 'unknown error');
+      }
+    } catch (err) {
+      statusMsg.textContent = 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง (' + err.message + ')';
+      statusMsg.className = 'error';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'ส่งคำขอ';
+    }
+  });
+
+  populateSites();
+  toggleOther('requester', 'other-requester');
+  toggleOther('site-select', 'other-hnagan');
+  toggleOther('material', 'other-wasadu');
+  toggleOther('source', 'other-source');
+  initLiff();
+</script>
+
+</body>
+</html>
