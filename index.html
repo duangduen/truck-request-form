@@ -160,7 +160,7 @@
   <span id="loading-profile">กำลังโหลดข้อมูลผู้ใช้...</span>
 </div>
 
-<form id="request-form">
+<form id="request-form" novalidate>
 
   <div class="field">
     <label>ผู้ขอเบิก <span class="required">*</span></label>
@@ -298,6 +298,17 @@
   ];
   // ==========================================================
 
+  // ดัก error ที่เกิดขึ้นทั่วทั้งหน้า แล้วโชว์ให้เห็นบนจอ
+  // (จำเป็นเพราะ webview ในแอป LINE เปิด developer console เพื่อดู error ปกติไม่ได้)
+  window.addEventListener('error', (event) => {
+    const box = document.getElementById('status-msg');
+    if (box) {
+      box.textContent = 'เกิดข้อผิดพลาดในหน้าเว็บ: ' + event.message;
+      box.className = 'error';
+      box.style.display = 'block';
+    }
+  });
+
   let lineProfile = null;
 
   function populateSites() {
@@ -345,14 +356,45 @@
     return select.value;
   }
 
+  function validateForm() {
+    const missing = [];
+    const requesterVal = getValue('requester', 'requester-other-input');
+    if (!requesterVal) missing.push('ผู้ขอเบิก');
+
+    const siteVal = getValue('site-select', 'site-other-input');
+    if (!siteVal) missing.push('รหัส/ชื่อหน้างาน');
+
+    if (!document.getElementById('start-date').value) missing.push('วันเริ่มงาน');
+
+    const materialVal = getValue('material', 'material-other-input');
+    if (!materialVal) missing.push('วัสดุ');
+
+    if (!document.getElementById('quantity').value) missing.push('ปริมาณ');
+    if (!document.getElementById('unit').value) missing.push('หน่วย');
+
+    return missing;
+  }
+
   document.getElementById('request-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('submit-btn');
     const statusMsg = document.getElementById('status-msg');
-    btn.disabled = true;
-    btn.textContent = 'กำลังส่ง...';
     statusMsg.className = '';
     statusMsg.style.display = 'none';
+
+    // ตรวจสอบฟิลด์บังคับเอง แทนการพึ่ง native "required" ของเบราว์เซอร์
+    // (บาง webview ในแอป LINE ไม่แสดงข้อความเตือน native ทำให้ดูเหมือนกดแล้วไม่มีอะไรเกิดขึ้น)
+    const missing = validateForm();
+    if (missing.length > 0) {
+      statusMsg.textContent = 'กรุณากรอกให้ครบ: ' + missing.join(', ');
+      statusMsg.className = 'error';
+      statusMsg.style.display = 'block';
+      statusMsg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'กำลังส่ง...';
 
     const payload = {
       requester: getValue('requester', 'requester-other-input') || (lineProfile ? lineProfile.displayName : ''),
