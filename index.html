@@ -216,6 +216,38 @@
   .btn-small.edit-btn { color: var(--primary-dark); border-color: var(--primary); }
   .btn-small.cancel-btn { color: var(--error); border-color: var(--error); }
 
+  .site-status-section {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+  }
+  .site-status-current {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .site-status-current.pending-work { background: #fff4e0; color: var(--warn); }
+  .site-status-current.ready { background: #e6f9ee; color: var(--primary-dark); }
+  .site-status-current.not-ready { background: #fdecec; color: var(--error); }
+  .site-status-current.ready-now { background: #e3f0fd; color: #1565c0; }
+
+  .site-status-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .btn-tiny {
+    padding: 8px 4px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: white;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn-tiny.status-yellow { color: var(--warn); border-color: var(--warn); }
+  .btn-tiny.status-green { color: var(--primary-dark); border-color: var(--primary); }
+  .btn-tiny.status-red { color: var(--error); border-color: var(--error); }
+  .btn-tiny.status-blue { color: #1565c0; border-color: #1565c0; }
+
   #refresh-btn {
     align-self: flex-end;
     background: transparent;
@@ -332,8 +364,8 @@
 
 <script>
   // ============ ตั้งค่าที่ต้องแก้ก่อนใช้งานจริง ============
-const LIFF_ID = "2010592933-PmsdUucj"; // ได้จาก LINE Developers Console > LIFF tab
-  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz6U4_A2IrWxPu8fo7lQ6xUnpB8xU-KgCgqBaVybvZUBdMG8ubuquNDB34Xun9I9IIoFg/exec"; // ได้จากตอน Deploy Apps Script
+  const LIFF_ID = "2010592933-PmsdUucj";
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzFKIOFrW0409FuCbhTKIypezN3f23GvaXb0gkRjNOwe89VsxeCd9II5qwtBKgEVDwGXw/exec";
   // ==========================================================
 
   window.addEventListener('error', (event) => {
@@ -535,6 +567,36 @@ const LIFF_ID = "2010592933-PmsdUucj"; // ได้จาก LINE Developers Con
     }
   }
 
+  async function doUpdateSiteStatus(requestId, siteStatus) {
+    const note = prompt('หมายเหตุเพิ่มเติม (ถ้ามี ไม่บังคับ):') || '';
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'updateSiteStatus',
+          requestId,
+          siteStatus,
+          note,
+          lineUserId: lineProfile ? lineProfile.userId : ''
+        })
+      });
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+      loadMyRequests();
+    } catch (err) {
+      alert('อัปเดตไม่สำเร็จ: ' + err.message);
+    }
+  }
+
+  function siteStatusClass(siteStatus) {
+    if (siteStatus === 'ยังไม่เสร็จ') return 'pending-work';
+    if (siteStatus === 'เสร็จแล้ว') return 'ready';
+    if (siteStatus === 'หน้างานไม่พร้อม') return 'not-ready';
+    if (siteStatus === 'หน้างานพร้อม') return 'ready-now';
+    return '';
+  }
+
   async function loadMyRequests() {
     const container = document.getElementById('my-requests-list');
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
@@ -556,6 +618,7 @@ const LIFF_ID = "2010592933-PmsdUucj"; // ได้จาก LINE Developers Con
       container.innerHTML = '';
       result.requests.forEach(r => {
         const canEdit = r.status === 'รอจัดคิว';
+        const canUpdateSite = r.status !== 'ยกเลิกโดยผู้ขอ';
         const card = document.createElement('div');
         card.className = 'request-card';
         card.innerHTML = `
@@ -570,10 +633,27 @@ const LIFF_ID = "2010592933-PmsdUucj"; // ได้จาก LINE Developers Con
               <button class="btn-small edit-btn">แก้ไข</button>
               <button class="btn-small cancel-btn">ยกเลิก</button>
             </div>` : ''}
+          ${canUpdateSite ? `
+            <div class="site-status-section">
+              ${r.siteStatus ? `<span class="site-status-current ${siteStatusClass(r.siteStatus)}">
+                  หน้างาน: ${r.siteStatus} (${r.siteStatusUpdatedAt || ''})
+                </span>` : ''}
+              <div class="site-status-buttons">
+                <button class="btn-tiny status-yellow" data-status="ยังไม่เสร็จ">🟡 ยังไม่เสร็จ</button>
+                <button class="btn-tiny status-green" data-status="เสร็จแล้ว">🟢 เสร็จแล้ว</button>
+                <button class="btn-tiny status-red" data-status="หน้างานไม่พร้อม">🔴 ไม่พร้อม</button>
+                <button class="btn-tiny status-blue" data-status="หน้างานพร้อม">🔵 พร้อมแล้ว</button>
+              </div>
+            </div>` : ''}
         `;
         if (canEdit) {
           card.querySelector('.edit-btn').addEventListener('click', () => startEdit(r));
           card.querySelector('.cancel-btn').addEventListener('click', () => doCancel(r.requestId));
+        }
+        if (canUpdateSite) {
+          card.querySelectorAll('.btn-tiny').forEach(btn => {
+            btn.addEventListener('click', () => doUpdateSiteStatus(r.requestId, btn.dataset.status));
+          });
         }
         container.appendChild(card);
       });
