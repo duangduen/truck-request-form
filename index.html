@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ขอเบิกวัสดุ/ใช้รถ</title>
 
-<!-- LIFF SDK -->
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
 <style>
@@ -18,6 +17,7 @@
     --text: #1c1c1c;
     --text-muted: #6b7280;
     --error: #d64545;
+    --warn: #b8860b;
   }
   * { box-sizing: border-box; }
   body {
@@ -33,43 +33,57 @@
     padding: 18px 20px;
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 20;
   }
-  header h1 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 700;
+  header h1 { margin: 0; font-size: 18px; font-weight: 700; }
+  header p { margin: 4px 0 0; font-size: 13px; opacity: 0.9; }
+
+  .tabs {
+    display: flex;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 62px;
+    z-index: 19;
   }
-  header p {
-    margin: 4px 0 0;
-    font-size: 13px;
-    opacity: 0.9;
+  .tab-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
   }
+  .tab-btn.active {
+    color: var(--primary-dark);
+    border-bottom-color: var(--primary);
+  }
+
   #profile-bar {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 12px 20px;
+    padding: 10px 20px;
     background: var(--card);
     border-bottom: 1px solid var(--border);
-    font-size: 14px;
+    font-size: 13px;
   }
-  #profile-bar img {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-  }
-  form {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
+  #profile-bar img { width: 28px; height: 28px; border-radius: 50%; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  form { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
   .field {
     background: var(--card);
     border-radius: 12px;
     padding: 12px 14px;
     border: 1px solid var(--border);
+    position: relative;
   }
   .field label {
     display: block;
@@ -78,9 +92,8 @@
     color: var(--text-muted);
     margin-bottom: 6px;
   }
-  .field label .required {
-    color: var(--error);
-  }
+  .field label .required { color: var(--error); }
+
   select, input, textarea {
     width: 100%;
     border: none;
@@ -91,23 +104,35 @@
     outline: none;
     padding: 4px 0;
   }
-  textarea {
-    resize: vertical;
-    min-height: 60px;
-  }
-  .row {
-    display: flex;
-    gap: 10px;
-  }
-  .row .field {
-    flex: 1;
-  }
-  #other-hnagan, #other-wasadu, #other-source {
+  textarea { resize: vertical; min-height: 60px; }
+
+  .row { display: flex; gap: 10px; }
+  .row .field { flex: 1; }
+
+  .dropdown-list {
     display: none;
-    margin-top: 8px;
-    border-top: 1px dashed var(--border);
-    padding-top: 8px;
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: 100%;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-top: 4px;
+    max-height: 220px;
+    overflow-y: auto;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+    z-index: 15;
   }
+  .dropdown-item {
+    padding: 10px 12px;
+    font-size: 15px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .dropdown-item:last-child { border-bottom: none; }
+  .dropdown-item:active { background: #f4f6f5; }
+
   button[type="submit"] {
     background: var(--primary);
     color: white;
@@ -119,12 +144,20 @@
     cursor: pointer;
     margin-top: 8px;
   }
-  button[type="submit"]:active {
-    background: var(--primary-dark);
+  button[type="submit"]:active { background: var(--primary-dark); }
+  button[type="submit"]:disabled { opacity: 0.6; }
+
+  #cancel-edit-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    cursor: pointer;
+    display: none;
   }
-  button[type="submit"]:disabled {
-    opacity: 0.6;
-  }
+
   #status-msg {
     text-align: center;
     padding: 12px;
@@ -132,20 +165,65 @@
     font-size: 14px;
     display: none;
   }
-  #status-msg.success {
-    display: block;
-    background: #e6f9ee;
-    color: var(--primary-dark);
+  #status-msg.success { display: block; background: #e6f9ee; color: var(--primary-dark); }
+  #status-msg.error { display: block; background: #fdecec; color: var(--error); }
+
+  .hint { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  #form-title-hint {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--warn);
+    padding: 0 16px;
+    display: none;
   }
-  #status-msg.error {
-    display: block;
-    background: #fdecec;
-    color: var(--error);
+
+  /* ====== คำขอของฉัน ====== */
+  #my-requests-view { padding: 16px; display: none; flex-direction: column; gap: 12px; }
+  #my-requests-view.active { display: flex; }
+
+  .request-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
   }
-  .hint {
+  .request-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .status-badge {
     font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 2px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .status-pending { background: #fff4e0; color: var(--warn); }
+  .status-cancelled { background: #f1f1f1; color: var(--text-muted); }
+  .status-done { background: #e6f9ee; color: var(--primary-dark); }
+
+  .card-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .btn-small {
+    flex: 1;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: white;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .btn-small.edit-btn { color: var(--primary-dark); border-color: var(--primary); }
+  .btn-small.cancel-btn { color: var(--error); border-color: var(--error); }
+
+  #refresh-btn {
+    align-self: flex-end;
+    background: transparent;
+    border: none;
+    color: var(--primary-dark);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px;
   }
 </style>
 </head>
@@ -156,150 +234,108 @@
   <p>กรอกครั้งเดียว ข้อมูลเข้าระบบทันที ไม่ต้องถ่ายรูปส่งอีกต่อไป</p>
 </header>
 
-<div id="profile-bar">
-  <span id="loading-profile">กำลังโหลดข้อมูลผู้ใช้...</span>
+<div class="tabs">
+  <button class="tab-btn active" data-tab="form-view">ส่งคำขอใหม่</button>
+  <button class="tab-btn" data-tab="my-requests-view">คำขอของฉัน</button>
 </div>
 
-<form id="request-form" novalidate>
+<div id="profile-bar"><span id="loading-profile">กำลังโหลดข้อมูลผู้ใช้...</span></div>
 
-  <div class="field">
-    <label>ผู้ขอเบิก <span class="required">*</span></label>
-    <select id="requester" required>
-      <option value="">-- เลือกชื่อ --</option>
-      <option value="ช่างจอร์น - สรชัย">ช่างจอร์น - สรชัย</option>
-      <option value="ช่างหน่อย">ช่างหน่อย</option>
-      <option value="ช่างเบล - อนาวิล">ช่างเบล - อนาวิล</option>
-      <option value="ช่างมนูญศิริ">ช่างมนูญศิริ</option>
-      <option value="ช่างใจ">ช่างใจ</option>
-      <option value="ช่างแบงค์">ช่างแบงค์</option>
-      <option value="ช่างตี๋">ช่างตี๋</option>
-      <option value="ช่างเนส">ช่างเนส</option>
-      <option value="ช่างอาร์ต">ช่างอาร์ต</option>
-      <option value="ช่างออม">ช่างออม</option>
-      <option value="__other__">อื่นๆ (พิมพ์เอง)</option>
-    </select>
-    <div id="other-requester" style="display:none; margin-top:8px;">
-      <input type="text" id="requester-other-input" placeholder="พิมพ์ชื่อผู้ขอเบิก">
-    </div>
-    <div class="hint">ระบบจะเติมชื่อ LINE ของคุณให้อัตโนมัติ เลือก/แก้ไขได้ตามจริง</div>
-  </div>
+<!-- ============ แท็บ 1: ฟอร์มส่งคำขอ / แก้ไขคำขอ ============ -->
+<div id="form-view" class="view active">
 
-  <div class="field">
-    <label>รหัส/ชื่อหน้างาน <span class="required">*</span></label>
-    <select id="site-select" required>
-      <option value="">-- เลือกหน้างาน --</option>
-      <option value="__other__">งานใหม่ / ไม่อยู่ในรายการ (พิมพ์เอง)</option>
-    </select>
-    <div id="other-hnagan">
-      <input type="text" id="site-other-input" placeholder="เช่น TRC.68/12 - ถนนคอนกรีต ม.5 ต.นาบ่อคำ">
-    </div>
-  </div>
+  <div id="form-title-hint">กำลังแก้ไขคำขอเดิม</div>
 
-  <div class="row">
+  <form id="request-form" novalidate>
+
     <div class="field">
-      <label>วันเริ่มงานที่ต้องการรถ <span class="required">*</span></label>
-      <input type="date" id="start-date" required>
+      <label>ผู้ขอเบิก <span class="required">*</span></label>
+      <input type="text" id="requester-input" placeholder="พิมพ์เพื่อค้นหา หรือพิมพ์ชื่อใหม่" autocomplete="off">
+      <div class="dropdown-list" id="requester-list"></div>
+      <div class="hint">ระบบเติมชื่อ LINE ให้อัตโนมัติ แก้ไขได้ตามจริง</div>
     </div>
-  </div>
 
-  <div class="field">
-    <label>วัสดุ <span class="required">*</span></label>
-    <select id="material" required>
-      <option value="">-- เลือกวัสดุ --</option>
-      <option value="ดิน">ดิน</option>
-      <option value="ลูกรัง">ลูกรัง</option>
-      <option value="ทรายหยาบ">ทรายหยาบ</option>
-      <option value="ทรายถม">ทรายถม</option>
-      <option value="หินใหญ่">หินใหญ่</option>
-      <option value="หินลิปแลป">หินลิปแลป</option>
-      <option value="หินคลุก">หินคลุก</option>
-      <option value="หินฝุ่น">หินฝุ่น</option>
-      <option value="กรวด">กรวด</option>
-      <option value="ยาง Hot Mix">ยาง Hot Mix</option>
-      <option value="เศษวัสดุ (ขนทิ้ง)">เศษวัสดุ (ขนทิ้ง)</option>
-      <option value="__other__">อื่นๆ (พิมพ์เอง)</option>
-    </select>
-    <div id="other-wasadu">
-      <input type="text" id="material-other-input" placeholder="พิมพ์ชื่อวัสดุ">
-    </div>
-  </div>
-
-  <div class="row">
     <div class="field">
-      <label>ปริมาณ <span class="required">*</span></label>
-      <input type="number" id="quantity" min="0" step="0.1" required>
+      <label>รหัส/ชื่อหน้างาน <span class="required">*</span></label>
+      <input type="text" id="site-input" placeholder="พิมพ์เพื่อค้นหา หรือพิมพ์งานใหม่" autocomplete="off">
+      <div class="dropdown-list" id="site-list"></div>
     </div>
+
+    <div class="row">
+      <div class="field">
+        <label>วันเริ่มงานที่ต้องการรถ <span class="required">*</span></label>
+        <input type="date" id="start-date">
+      </div>
+    </div>
+
     <div class="field">
-      <label>หน่วย <span class="required">*</span></label>
-      <select id="unit" required>
-        <option value="">-- เลือก --</option>
-        <option value="เที่ยว">เที่ยว</option>
-        <option value="พ่วง">พ่วง</option>
-        <option value="ตัน">ตัน</option>
-        <option value="คัน">คัน</option>
-      </select>
+      <label>วัสดุ <span class="required">*</span></label>
+      <input type="text" id="material-input" placeholder="พิมพ์เพื่อค้นหา หรือพิมพ์วัสดุใหม่" autocomplete="off">
+      <div class="dropdown-list" id="material-list"></div>
     </div>
-  </div>
 
-  <div class="field">
-    <label>จำนวนคัน (ถ้าทราบ)</label>
-    <input type="number" id="truck-count" min="0" step="1">
-  </div>
-
-  <div class="field">
-    <label>แหล่งวัสดุ</label>
-    <select id="source">
-      <option value="">-- เลือกแหล่งวัสดุ --</option>
-      <option value="หน้างาน">หน้างาน</option>
-      <option value="SWL - สุวลี">SWL - สุวลี</option>
-      <option value="TRS - กำแพงเพชร">TRS - กำแพงเพชร</option>
-      <option value="ท่าทรายแม่น้ำปิง">ท่าทรายแม่น้ำปิง</option>
-      <option value="ท่าทรายกุ่ยหลีฮง">ท่าทรายกุ่ยหลีฮง</option>
-      <option value="TRC - หนองปลิง">TRC - หนองปลิง</option>
-      <option value="บ่อลูกรัง - บึงสามพัน">บ่อลูกรัง - บึงสามพัน</option>
-      <option value="ศุภกิจ - แพล้นยาง">ศุภกิจ - แพล้นยาง</option>
-      <option value="__other__">อื่นๆ (พิมพ์เอง)</option>
-    </select>
-    <div id="other-source">
-      <input type="text" id="source-other-input" placeholder="พิมพ์แหล่งวัสดุ">
+    <div class="row">
+      <div class="field">
+        <label>ปริมาณ <span class="required">*</span></label>
+        <input type="number" id="quantity" min="0" step="0.1">
+      </div>
+      <div class="field">
+        <label>หน่วย <span class="required">*</span></label>
+        <select id="unit">
+          <option value="">-- เลือก --</option>
+          <option value="เที่ยว">เที่ยว</option>
+          <option value="พ่วง">พ่วง</option>
+          <option value="ตัน">ตัน</option>
+          <option value="คัน">คัน</option>
+        </select>
+      </div>
     </div>
-  </div>
 
-  <div class="field">
-    <label>ระยะทาง (กม.) โดยประมาณ</label>
-    <input type="number" id="distance" min="0" step="0.1">
-  </div>
+    <div class="field">
+      <label>จำนวนคัน (ถ้าทราบ)</label>
+      <input type="number" id="truck-count" min="0" step="1">
+    </div>
 
-  <div class="field">
-    <label>รายละเอียดงาน / หมายเหตุ</label>
-    <textarea id="detail" placeholder="เช่น ทอยหินกองสต๊อกหน้างาน, เสริมทรายจุดที่ยุบ ฯลฯ"></textarea>
-  </div>
+    <div class="field">
+      <label>แหล่งวัสดุ</label>
+      <input type="text" id="source-input" placeholder="พิมพ์เพื่อค้นหา หรือพิมพ์แหล่งใหม่" autocomplete="off">
+      <div class="dropdown-list" id="source-list"></div>
+    </div>
 
-  <div class="field">
-    <label>เบอร์ติดต่อหน้างาน</label>
-    <input type="tel" id="phone" placeholder="เช่น 081-3904854">
-  </div>
+    <div class="field">
+      <label>ระยะทาง (กม.) โดยประมาณ</label>
+      <input type="number" id="distance" min="0" step="0.1">
+    </div>
 
-  <div id="status-msg"></div>
+    <div class="field">
+      <label>รายละเอียดงาน / หมายเหตุ</label>
+      <textarea id="detail" placeholder="เช่น ทอยหินกองสต๊อกหน้างาน, เสริมทรายจุดที่ยุบ ฯลฯ"></textarea>
+    </div>
 
-  <button type="submit" id="submit-btn">ส่งคำขอ</button>
-</form>
+    <div class="field">
+      <label>เบอร์ติดต่อหน้างาน</label>
+      <input type="tel" id="phone" placeholder="เช่น 081-3904854">
+    </div>
+
+    <div id="status-msg"></div>
+
+    <button type="submit" id="submit-btn">ส่งคำขอ</button>
+    <button type="button" id="cancel-edit-btn">ยกเลิกการแก้ไข กลับไปสร้างคำขอใหม่</button>
+  </form>
+</div>
+
+<!-- ============ แท็บ 2: คำขอของฉัน ============ -->
+<div id="my-requests-view" class="view">
+  <button id="refresh-btn">รีเฟรช</button>
+  <div id="my-requests-list"><p class="hint">กำลังโหลด...</p></div>
+</div>
 
 <script>
   // ============ ตั้งค่าที่ต้องแก้ก่อนใช้งานจริง ============
-  const LIFF_ID = "2010592933-PmsdUucj"; // ได้จาก LINE Developers Console > LIFF tab
+const LIFF_ID = "2010592933-PmsdUucj"; // ได้จาก LINE Developers Console > LIFF tab
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxjyj6XOOpTfn2Y0FOYbbov4gbj503SUrX6xCi3wQJRImEIMyWvLOOnd3Iy5_Kf2b4X2Q/exec"; // ได้จากตอน Deploy Apps Script
-  // ตัวอย่างหน้างานที่เปิดอยู่ตอนนี้ - ควรอัปเดตให้ตรงกับงานจริง หรือให้ดึงจาก Sheet แบบไดนามิกในเวอร์ชันถัดไป
-  const ACTIVE_SITES = [
-    "TRC.67/49 - ถนนคอนกรีตสายบ้านน้ำดิบ-บ้านลานเพชร",
-    "SP.67/09 - เขื่อนกันตลิ่ง ม.2 ต.หนองปลิง",
-    "SP.66/06 - เขื่อนกันตลิ่งริมแม่น้ำปิงหมู่ 5 ต.โกสัมพี",
-    "SM.67/24 - ถนนคอนกรีตเสริมเหล็ก ม.10 บ้านหนองทราย"
-  ];
   // ==========================================================
 
-  // ดัก error ที่เกิดขึ้นทั่วทั้งหน้า แล้วโชว์ให้เห็นบนจอ
-  // (จำเป็นเพราะ webview ในแอป LINE เปิด developer console เพื่อดู error ปกติไม่ได้)
   window.addEventListener('error', (event) => {
     const box = document.getElementById('status-msg');
     if (box) {
@@ -310,101 +346,120 @@
   });
 
   let lineProfile = null;
+  let editingRequestId = null;
+  let optionsData = { requesters: [], sites: [], materials: [], sources: [] };
 
-  function populateSites() {
-    const select = document.getElementById('site-select');
-    ACTIVE_SITES.forEach(site => {
-      const opt = document.createElement('option');
-      opt.value = site;
-      opt.textContent = site;
-      select.insertBefore(opt, select.lastElementChild);
-    });
-  }
-
-  function toggleOther(selectId, otherBoxId) {
-    const select = document.getElementById(selectId);
-    const box = document.getElementById(otherBoxId);
-    select.addEventListener('change', () => {
-      box.style.display = select.value === '__other__' ? 'block' : 'none';
-    });
-  }
-
+  // ---------- LIFF init ----------
   async function initLiff() {
     try {
       await liff.init({ liffId: LIFF_ID });
-      if (!liff.isLoggedIn()) {
-        liff.login();
-        return;
-      }
+      if (!liff.isLoggedIn()) { liff.login(); return; }
       lineProfile = await liff.getProfile();
-      const bar = document.getElementById('profile-bar');
-      bar.innerHTML = `
+      document.getElementById('profile-bar').innerHTML = `
         <img src="${lineProfile.pictureUrl || ''}" onerror="this.style.display='none'">
         <span>เข้าสู่ระบบเป็น: <strong>${lineProfile.displayName}</strong></span>
       `;
+      const reqInput = document.getElementById('requester-input');
+      if (!reqInput.value) reqInput.value = lineProfile.displayName;
     } catch (err) {
       document.getElementById('profile-bar').innerHTML =
         '<span style="color:#d64545">โหลดโปรไฟล์ LINE ไม่สำเร็จ (เปิดนอกแอป LINE หรือยังไม่ได้ตั้งค่า LIFF_ID)</span>';
     }
   }
 
-  function getValue(selectId, otherInputId) {
-    const select = document.getElementById(selectId);
-    if (select.value === '__other__') {
-      return document.getElementById(otherInputId).value.trim();
+  // ---------- โหลด dropdown จากชีต ----------
+  async function loadOptions() {
+    try {
+      const res = await fetch(APPS_SCRIPT_URL + '?action=options');
+      const result = await res.json();
+      if (result.status === 'ok') optionsData = result.options;
+    } catch (err) {
+      console.error('โหลดตัวเลือกไม่สำเร็จ', err);
     }
-    return select.value;
   }
 
+  // ---------- searchable dropdown ----------
+  function setupSearchable(inputId, listId, getOptions) {
+    const input = document.getElementById(inputId);
+    const list = document.getElementById(listId);
+
+    function render(filterText) {
+      const options = getOptions();
+      const uniq = [...new Set(options)];
+      const filtered = filterText
+        ? uniq.filter(o => o.toLowerCase().includes(filterText.toLowerCase()))
+        : uniq;
+      list.innerHTML = '';
+      if (filtered.length === 0) { list.style.display = 'none'; return; }
+      filtered.slice(0, 30).forEach(opt => {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.textContent = opt;
+        item.addEventListener('mousedown', (ev) => {
+          ev.preventDefault();
+          input.value = opt;
+          list.style.display = 'none';
+        });
+        list.appendChild(item);
+      });
+      list.style.display = 'block';
+    }
+
+    input.addEventListener('input', () => render(input.value));
+    input.addEventListener('focus', () => render(input.value));
+    input.addEventListener('blur', () => setTimeout(() => { list.style.display = 'none'; }, 150));
+  }
+
+  // ---------- validate ----------
   function validateForm() {
     const missing = [];
-    const requesterVal = getValue('requester', 'requester-other-input');
-    if (!requesterVal) missing.push('ผู้ขอเบิก');
-
-    const siteVal = getValue('site-select', 'site-other-input');
-    if (!siteVal) missing.push('รหัส/ชื่อหน้างาน');
-
+    if (!document.getElementById('requester-input').value.trim()) missing.push('ผู้ขอเบิก');
+    if (!document.getElementById('site-input').value.trim()) missing.push('รหัส/ชื่อหน้างาน');
     if (!document.getElementById('start-date').value) missing.push('วันเริ่มงาน');
-
-    const materialVal = getValue('material', 'material-other-input');
-    if (!materialVal) missing.push('วัสดุ');
-
+    if (!document.getElementById('material-input').value.trim()) missing.push('วัสดุ');
     if (!document.getElementById('quantity').value) missing.push('ปริมาณ');
     if (!document.getElementById('unit').value) missing.push('หน่วย');
-
     return missing;
   }
 
+  function resetFormToCreateMode() {
+    editingRequestId = null;
+    document.getElementById('request-form').reset();
+    if (lineProfile) document.getElementById('requester-input').value = lineProfile.displayName;
+    document.getElementById('submit-btn').textContent = 'ส่งคำขอ';
+    document.getElementById('cancel-edit-btn').style.display = 'none';
+    document.getElementById('form-title-hint').style.display = 'none';
+  }
+
+  // ---------- submit (create/edit) ----------
   document.getElementById('request-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('submit-btn');
     const statusMsg = document.getElementById('status-msg');
-    statusMsg.className = '';
-    statusMsg.style.display = 'none';
+    statusMsg.className = ''; statusMsg.style.display = 'none';
 
-    // ตรวจสอบฟิลด์บังคับเอง แทนการพึ่ง native "required" ของเบราว์เซอร์
-    // (บาง webview ในแอป LINE ไม่แสดงข้อความเตือน native ทำให้ดูเหมือนกดแล้วไม่มีอะไรเกิดขึ้น)
     const missing = validateForm();
     if (missing.length > 0) {
       statusMsg.textContent = 'กรุณากรอกให้ครบ: ' + missing.join(', ');
-      statusMsg.className = 'error';
-      statusMsg.style.display = 'block';
+      statusMsg.className = 'error'; statusMsg.style.display = 'block';
       statusMsg.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
     btn.disabled = true;
-    btn.textContent = 'กำลังส่ง...';
+    btn.textContent = editingRequestId ? 'กำลังบันทึก...' : 'กำลังส่ง...';
 
     const payload = {
-      requester: getValue('requester', 'requester-other-input') || (lineProfile ? lineProfile.displayName : ''),
-      site: getValue('site-select', 'site-other-input'),
+      action: editingRequestId ? 'edit' : 'create',
+      requestId: editingRequestId || undefined,
+      requester: document.getElementById('requester-input').value.trim(),
+      site: document.getElementById('site-input').value.trim(),
       startDate: document.getElementById('start-date').value,
-      material: getValue('material', 'material-other-input'),
+      material: document.getElementById('material-input').value.trim(),
       quantity: document.getElementById('quantity').value,
       unit: document.getElementById('unit').value,
       truckCount: document.getElementById('truck-count').value,
-      source: getValue('source', 'source-other-input'),
+      source: document.getElementById('source-input').value.trim(),
       distanceKm: document.getElementById('distance').value,
       detail: document.getElementById('detail').value,
       phone: document.getElementById('phone').value,
@@ -416,36 +471,138 @@
     try {
       const res = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // เลี่ยง CORS preflight ของ Apps Script
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
       const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message || 'unknown error');
 
-      if (result.status === 'ok') {
-        statusMsg.textContent = 'ส่งคำขอสำเร็จแล้ว ระบบบันทึกข้อมูลเรียบร้อย';
-        statusMsg.className = 'success';
-        document.getElementById('request-form').reset();
-        setTimeout(() => {
-          if (liff.isInClient()) liff.closeWindow();
-        }, 1800);
-      } else {
-        throw new Error(result.message || 'unknown error');
-      }
+      statusMsg.textContent = editingRequestId ? 'บันทึกการแก้ไขสำเร็จแล้ว' : 'ส่งคำขอสำเร็จแล้ว';
+      statusMsg.className = 'success'; statusMsg.style.display = 'block';
+      resetFormToCreateMode();
+      setTimeout(() => { if (liff.isInClient && liff.isInClient()) liff.closeWindow(); }, 1800);
+
     } catch (err) {
-      statusMsg.textContent = 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่อีกครั้ง (' + err.message + ')';
-      statusMsg.className = 'error';
+      statusMsg.textContent = 'บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง (' + err.message + ')';
+      statusMsg.className = 'error'; statusMsg.style.display = 'block';
     } finally {
       btn.disabled = false;
-      btn.textContent = 'ส่งคำขอ';
+      btn.textContent = editingRequestId ? 'บันทึกการแก้ไข' : 'ส่งคำขอ';
     }
   });
 
-  populateSites();
-  toggleOther('requester', 'other-requester');
-  toggleOther('site-select', 'other-hnagan');
-  toggleOther('material', 'other-wasadu');
-  toggleOther('source', 'other-source');
+  document.getElementById('cancel-edit-btn').addEventListener('click', resetFormToCreateMode);
+
+  // ---------- แท็บ "คำขอของฉัน" ----------
+  function statusClass(status) {
+    if (status === 'รอจัดคิว') return 'pending';
+    if (status.indexOf('ยกเลิก') !== -1) return 'cancelled';
+    return 'done';
+  }
+
+  function startEdit(r) {
+    editingRequestId = r.requestId;
+    document.querySelector('[data-tab="form-view"]').click();
+    document.getElementById('requester-input').value = r.requester || '';
+    document.getElementById('site-input').value = r.site || '';
+    document.getElementById('start-date').value = r.startDate || '';
+    document.getElementById('material-input').value = r.material || '';
+    document.getElementById('quantity').value = r.quantity || '';
+    document.getElementById('unit').value = r.unit || '';
+    document.getElementById('truck-count').value = r.truckCount || '';
+    document.getElementById('source-input').value = r.source || '';
+    document.getElementById('distance').value = r.distanceKm || '';
+    document.getElementById('detail').value = r.detail || '';
+    document.getElementById('phone').value = r.phone || '';
+    document.getElementById('submit-btn').textContent = 'บันทึกการแก้ไข';
+    document.getElementById('cancel-edit-btn').style.display = 'block';
+    document.getElementById('form-title-hint').style.display = 'block';
+  }
+
+  async function doCancel(requestId) {
+    if (!confirm('ยืนยันยกเลิกคำขอนี้?')) return;
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'cancel', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
+      });
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+      loadMyRequests();
+    } catch (err) {
+      alert('ยกเลิกไม่สำเร็จ: ' + err.message);
+    }
+  }
+
+  async function loadMyRequests() {
+    const container = document.getElementById('my-requests-list');
+    container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
+
+    if (!lineProfile) {
+      container.innerHTML = '<p class="hint">ไม่พบข้อมูลผู้ใช้ LINE กรุณาเปิดผ่านแอป LINE</p>';
+      return;
+    }
+    try {
+      const res = await fetch(APPS_SCRIPT_URL + '?action=myRequests&userId=' + encodeURIComponent(lineProfile.userId));
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+
+      if (result.requests.length === 0) {
+        container.innerHTML = '<p class="hint">คุณยังไม่มีคำขอ</p>';
+        return;
+      }
+
+      container.innerHTML = '';
+      result.requests.forEach(r => {
+        const canEdit = r.status === 'รอจัดคิว';
+        const card = document.createElement('div');
+        card.className = 'request-card';
+        card.innerHTML = `
+          <div class="request-card-header">
+            <span class="status-badge status-${statusClass(r.status)}">${r.status}</span>
+            <span class="hint">${r.requestedAt}</span>
+          </div>
+          <div><strong>${r.site}</strong></div>
+          <div>${r.material} ${r.quantity} ${r.unit} — วันเริ่มงาน ${r.startDate}</div>
+          ${r.assigned ? `<div class="hint">แจกงาน: ${r.assigned}</div>` : ''}
+          ${canEdit ? `<div class="card-actions">
+              <button class="btn-small edit-btn">แก้ไข</button>
+              <button class="btn-small cancel-btn">ยกเลิก</button>
+            </div>` : ''}
+        `;
+        if (canEdit) {
+          card.querySelector('.edit-btn').addEventListener('click', () => startEdit(r));
+          card.querySelector('.cancel-btn').addEventListener('click', () => doCancel(r.requestId));
+        }
+        container.appendChild(card);
+      });
+    } catch (err) {
+      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + err.message + '</p>';
+    }
+  }
+
+  document.getElementById('refresh-btn').addEventListener('click', loadMyRequests);
+
+  // ---------- tab switching ----------
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById(btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'my-requests-view') loadMyRequests();
+    });
+  });
+
+  // ---------- init ----------
+  setupSearchable('requester-input', 'requester-list', () => optionsData.requesters);
+  setupSearchable('site-input', 'site-list', () => optionsData.sites);
+  setupSearchable('material-input', 'material-list', () => optionsData.materials);
+  setupSearchable('source-input', 'source-list', () => optionsData.sources);
+
   initLiff();
+  loadOptions();
 </script>
 
 </body>
