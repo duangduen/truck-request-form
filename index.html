@@ -6,6 +6,8 @@
 <title>ขอเบิกวัสดุ/ใช้รถ</title>
 
 <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <style>
   :root {
@@ -315,6 +317,11 @@
   }
   #note-modal-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
   #note-modal-confirm { background: var(--primary); border: none; color: white; }
+
+  .map-modal-box { max-height: 90vh; overflow-y: auto; }
+  #map-picker { width: 100%; height: 280px; border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
+  #map-modal-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
+  #map-modal-confirm { background: var(--primary); border: none; color: white; }
 </style>
 </head>
 <body>
@@ -382,7 +389,7 @@
     </div>
 
     <div class="field">
-      <label>จำนวนคัน (ถ้าทราบ)</label>
+      <label>จำนวนรถที่ต้องการ (คัน) (ถ้าทราบ)</label>
       <input type="number" id="truck-count" min="0" step="1">
     </div>
 
@@ -398,10 +405,13 @@
     </div>
 
     <div class="field">
-      <label>พิกัดปลายทาง (ถ้าทราบ ไม่บังคับ)</label>
+      <label>พิกัดปลายทาง (ถ้าทราบ)</label>
       <input type="text" id="location-input" placeholder="วางลิงก์ Google Maps หรือพิกัด เช่น 13.7563, 100.5018" autocomplete="off">
-      <button type="button" id="use-location-btn" class="btn-small" style="margin-top:8px;width:100%;">📍 ใช้พิกัดปัจจุบัน</button>
-      <div class="hint">กดปุ่มถ้ากำลังยืนอยู่หน้างานจริง หรือวางลิงก์แผนที่ก็ได้</div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button type="button" id="use-location-btn" class="btn-small" style="flex:1;">📍 พิกัดปัจจุบัน</button>
+        <button type="button" id="use-map-btn" class="btn-small" style="flex:1;">🗺️ ปักหมุดบนแผนที่</button>
+      </div>
+      <div class="hint">กดพิกัดปัจจุบันถ้ายืนอยู่หน้างานจริง หรือปักหมุดบนแผนที่ถ้าไม่ได้อยู่หน้างาน</div>
     </div>
 
     <div class="field">
@@ -425,6 +435,19 @@
 <div id="my-requests-view" class="view">
   <button id="refresh-btn">รีเฟรช</button>
   <div id="my-requests-list"><p class="hint">กำลังโหลด...</p></div>
+</div>
+
+<!-- ============ กล่องปักหมุดเลือกตำแหน่งบนแผนที่ ============ -->
+<div id="map-modal-overlay" class="modal-overlay">
+  <div class="modal-box map-modal-box">
+    <div class="modal-title">แตะบนแผนที่เพื่อปักหมุดตำแหน่งปลายทาง</div>
+    <div id="map-picker"></div>
+    <div class="hint" id="map-picker-coords">ยังไม่ได้เลือกตำแหน่ง — แตะบนแผนที่ หรือลากหมุดเพื่อปรับ</div>
+    <div class="modal-actions">
+      <button type="button" id="map-modal-cancel">ยกเลิก</button>
+      <button type="button" id="map-modal-confirm">ยืนยันตำแหน่งนี้</button>
+    </div>
+  </div>
 </div>
 
 <!-- ============ กล่องกรอกหมายเหตุแบบ custom (แทน window.prompt) ============ -->
@@ -708,6 +731,83 @@
     if (!loc) return '';
     return /^https?:\/\//i.test(loc) ? loc : ('https://maps.google.com/?q=' + encodeURIComponent(loc));
   }
+
+  // ---------- ปุ่มปักหมุดบนแผนที่ (สำหรับตอนไม่ได้อยู่หน้างานจริง ใช้ Leaflet + OpenStreetMap ฟรี ไม่ต้องมี API key) ----------
+  let pickerMap = null;
+  let pickerMarker = null;
+
+  function parseLatLngFromText(value) {
+    if (!value) return null;
+    const match = String(value).match(/(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/);
+    if (!match) return null;
+    return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+  }
+
+  function updatePickerCoordsLabel(lat, lng) {
+    document.getElementById('map-picker-coords').textContent =
+      'ตำแหน่งที่เลือก: ' + lat.toFixed(6) + ', ' + lng.toFixed(6);
+  }
+
+  function setPickerMarker(lat, lng) {
+    if (pickerMarker) {
+      pickerMarker.setLatLng([lat, lng]);
+    } else {
+      pickerMarker = L.marker([lat, lng], { draggable: true }).addTo(pickerMap);
+      pickerMarker.on('dragend', () => {
+        const pos = pickerMarker.getLatLng();
+        updatePickerCoordsLabel(pos.lat, pos.lng);
+      });
+    }
+    updatePickerCoordsLabel(lat, lng);
+  }
+
+  function openMapPicker() {
+    document.getElementById('map-modal-overlay').classList.add('active');
+
+    // สร้างแผนที่หลัง modal แสดงผลแล้วเท่านั้น ไม่งั้น Leaflet คำนวณขนาดกล่องผิด
+    setTimeout(() => {
+      if (!pickerMap) {
+        pickerMap = L.map('map-picker').setView([13.7563, 100.5018], 6); // จุดกลางเริ่มต้น: ประเทศไทย
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(pickerMap);
+        pickerMap.on('click', (e) => setPickerMarker(e.latlng.lat, e.latlng.lng));
+      } else {
+        pickerMap.invalidateSize();
+      }
+
+      const existing = parseLatLngFromText(document.getElementById('location-input').value);
+      if (existing) {
+        pickerMap.setView([existing.lat, existing.lng], 15);
+        setPickerMarker(existing.lat, existing.lng);
+      } else if (navigator.geolocation) {
+        // ถ้ายังไม่เคยเลือกตำแหน่งมาก่อน ลองเลื่อนแผนที่ไปตำแหน่งปัจจุบันแบบเงียบๆ (ไม่ปักหมุดให้อัตโนมัติ ผู้ใช้ต้องแตะเลือกเอง)
+        navigator.geolocation.getCurrentPosition(
+          (pos) => { if (!pickerMarker) pickerMap.setView([pos.coords.latitude, pos.coords.longitude], 14); },
+          () => {},
+          { timeout: 5000 }
+        );
+      }
+    }, 100);
+  }
+
+  document.getElementById('use-map-btn').addEventListener('click', openMapPicker);
+
+  document.getElementById('map-modal-cancel').addEventListener('click', () => {
+    document.getElementById('map-modal-overlay').classList.remove('active');
+  });
+
+  document.getElementById('map-modal-confirm').addEventListener('click', () => {
+    if (!pickerMarker) {
+      alert('กรุณาแตะบนแผนที่เพื่อเลือกตำแหน่งก่อน');
+      return;
+    }
+    const pos = pickerMarker.getLatLng();
+    document.getElementById('location-input').value =
+      `https://maps.google.com/?q=${pos.lat.toFixed(6)},${pos.lng.toFixed(6)}`;
+    document.getElementById('map-modal-overlay').classList.remove('active');
+  });
 
   function escapeHtml(str) {
     if (str === undefined || str === null) return '';
