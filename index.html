@@ -871,7 +871,7 @@
       container.innerHTML = '';
       result.requests.forEach(r => {
         const canEdit = r.status === 'รอจัดคิว';
-        const canUpdateSite = r.status !== 'ยกเลิกโดยผู้ขอ';
+        const canUpdateSite = r.status.indexOf('ยกเลิก') === -1;
         const card = document.createElement('div');
         card.className = 'request-card';
         card.innerHTML = `
