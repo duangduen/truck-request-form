@@ -64,14 +64,18 @@
 
   #profile-bar {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
     padding: 10px 20px;
     background: var(--card);
     border-bottom: 1px solid var(--border);
     font-size: 13px;
   }
+  #profile-bar .profile-row { display: flex; align-items: center; gap: 10px; }
   #profile-bar img { width: 28px; height: 28px; border-radius: 50%; }
+  #profile-bar .userid-row { font-size: 11px; color: var(--text-muted); }
+  #profile-bar .userid-row span { user-select: all; word-break: break-all; }
 
   .view { display: none; }
   .view.active { display: block; }
@@ -257,6 +261,60 @@
     cursor: pointer;
     padding: 4px;
   }
+
+  .site-note-log {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    white-space: pre-line;
+    background: #f8f9f8;
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+
+  /* ====== custom note modal (แทน window.prompt เพราะเบราว์เซอร์จะโชว์ชื่อโดเมนเอง) ====== */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 100;
+    align-items: flex-end;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-box {
+    background: white;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    padding: 18px 18px 22px;
+    animation: modal-up 0.15s ease-out;
+  }
+  @keyframes modal-up {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .modal-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+  #note-modal-textarea {
+    width: 100%;
+    min-height: 80px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 15px;
+    font-family: inherit;
+    resize: vertical;
+  }
+  .modal-actions { display: flex; gap: 10px; margin-top: 12px; }
+  .modal-actions button {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #note-modal-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
+  #note-modal-confirm { background: var(--primary); border: none; color: white; }
 </style>
 </head>
 <body>
@@ -340,6 +398,13 @@
     </div>
 
     <div class="field">
+      <label>พิกัดปลายทาง (ถ้าทราบ ไม่บังคับ)</label>
+      <input type="text" id="location-input" placeholder="วางลิงก์ Google Maps หรือพิกัด เช่น 13.7563, 100.5018" autocomplete="off">
+      <button type="button" id="use-location-btn" class="btn-small" style="margin-top:8px;width:100%;">📍 ใช้พิกัดปัจจุบัน</button>
+      <div class="hint">กดปุ่มถ้ากำลังยืนอยู่หน้างานจริง หรือวางลิงก์แผนที่ก็ได้</div>
+    </div>
+
+    <div class="field">
       <label>รายละเอียดงาน / หมายเหตุ</label>
       <textarea id="detail" placeholder="เช่น ทอยหินกองสต๊อกหน้างาน, เสริมทรายจุดที่ยุบ ฯลฯ"></textarea>
     </div>
@@ -360,6 +425,18 @@
 <div id="my-requests-view" class="view">
   <button id="refresh-btn">รีเฟรช</button>
   <div id="my-requests-list"><p class="hint">กำลังโหลด...</p></div>
+</div>
+
+<!-- ============ กล่องกรอกหมายเหตุแบบ custom (แทน window.prompt) ============ -->
+<div id="note-modal-overlay" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title" id="note-modal-title">แจ้งสถานะหน้างาน</div>
+    <textarea id="note-modal-textarea" placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)"></textarea>
+    <div class="modal-actions">
+      <button type="button" id="note-modal-cancel">ยกเลิก</button>
+      <button type="button" id="note-modal-confirm">ยืนยัน</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -388,8 +465,11 @@
       if (!liff.isLoggedIn()) { liff.login(); return; }
       lineProfile = await liff.getProfile();
       document.getElementById('profile-bar').innerHTML = `
-        <img src="${lineProfile.pictureUrl || ''}" onerror="this.style.display='none'">
-        <span>เข้าสู่ระบบเป็น: <strong>${lineProfile.displayName}</strong></span>
+        <div class="profile-row">
+          <img src="${lineProfile.pictureUrl || ''}" onerror="this.style.display='none'">
+          <span>เข้าสู่ระบบเป็น: <strong>${lineProfile.displayName}</strong></span>
+        </div>
+        <div class="userid-row">LINE User ID (ใช้ตั้งค่าทดสอบแจ้งเตือน): <span>${lineProfile.userId}</span></div>
       `;
       const reqInput = document.getElementById('requester-input');
       if (!reqInput.value) reqInput.value = lineProfile.displayName;
@@ -493,6 +573,7 @@
       truckCount: document.getElementById('truck-count').value,
       source: document.getElementById('source-input').value.trim(),
       distanceKm: document.getElementById('distance').value,
+      location: document.getElementById('location-input').value.trim(),
       detail: document.getElementById('detail').value,
       phone: document.getElementById('phone').value,
       lineUserId: lineProfile ? lineProfile.userId : '',
@@ -544,6 +625,7 @@
     document.getElementById('truck-count').value = r.truckCount || '';
     document.getElementById('source-input').value = r.source || '';
     document.getElementById('distance').value = r.distanceKm || '';
+    document.getElementById('location-input').value = r.location || '';
     document.getElementById('detail').value = r.detail || '';
     document.getElementById('phone').value = r.phone || '';
     document.getElementById('submit-btn').textContent = 'บันทึกการแก้ไข';
@@ -567,8 +649,79 @@
     }
   }
 
+  // กล่องกรอกหมายเหตุของเราเอง ใช้แทน window.prompt() เพราะ prompt() เบราว์เซอร์จะ
+  // แปะชื่อโดเมน (เช่น "duangduen.github.io says") ไว้ให้เองโดยแก้ไข/ซ่อนด้วย JS ไม่ได้เลย
+  function openNoteModal(titleText) {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById('note-modal-overlay');
+      const textarea = document.getElementById('note-modal-textarea');
+      const title = document.getElementById('note-modal-title');
+      const confirmBtn = document.getElementById('note-modal-confirm');
+      const cancelBtn = document.getElementById('note-modal-cancel');
+
+      title.textContent = titleText;
+      textarea.value = '';
+      overlay.classList.add('active');
+      setTimeout(() => textarea.focus(), 50);
+
+      function cleanup(result) {
+        overlay.classList.remove('active');
+        confirmBtn.removeEventListener('click', onConfirm);
+        cancelBtn.removeEventListener('click', onCancel);
+        resolve(result);
+      }
+      function onConfirm() { cleanup(textarea.value.trim()); }
+      function onCancel() { cleanup(null); }
+
+      confirmBtn.addEventListener('click', onConfirm);
+      cancelBtn.addEventListener('click', onCancel);
+    });
+  }
+
+  // ---------- ปุ่มใช้พิกัดปัจจุบัน ----------
+  document.getElementById('use-location-btn').addEventListener('click', () => {
+    const btn = document.getElementById('use-location-btn');
+    if (!navigator.geolocation) {
+      alert('อุปกรณ์/เบราว์เซอร์นี้ไม่รองรับการระบุพิกัด กรุณาวางลิงก์ Google Maps แทน');
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'กำลังระบุตำแหน่ง...';
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        document.getElementById('location-input').value = `https://maps.google.com/?q=${latitude},${longitude}`;
+        btn.disabled = false;
+        btn.textContent = '📍 ใช้พิกัดปัจจุบัน';
+      },
+      (err) => {
+        alert('ดึงพิกัดไม่สำเร็จ: ' + err.message + ' (ต้องกดอนุญาตสิทธิ์ตำแหน่งที่ตั้งก่อน ถ้าไม่ขึ้นให้ลองปิดเปิดแอป LINE ใหม่ หรือวางลิงก์แผนที่แทน)');
+        btn.disabled = false;
+        btn.textContent = '📍 ใช้พิกัดปัจจุบัน';
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  });
+
+  // แปลงค่าที่กรอกไว้ (ลิงก์หรือพิกัดดิบ) ให้เป็นลิงก์เปิด Google Maps ได้เสมอ
+  function locationHref(loc) {
+    if (!loc) return '';
+    return /^https?:\/\//i.test(loc) ? loc : ('https://maps.google.com/?q=' + encodeURIComponent(loc));
+  }
+
+  function escapeHtml(str) {
+    if (str === undefined || str === null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   async function doUpdateSiteStatus(requestId, siteStatus) {
-    const note = prompt('หมายเหตุเพิ่มเติม (ถ้ามี ไม่บังคับ):') || '';
+    const note = await openNoteModal('แจ้งสถานะ: ' + siteStatus);
+    if (note === null) return; // กดยกเลิก
     try {
       const res = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
@@ -628,6 +781,7 @@
           </div>
           <div><strong>${r.site}</strong></div>
           <div>${r.material} ${r.quantity} ${r.unit} — วันเริ่มงาน ${r.startDate}</div>
+          ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
           ${r.assigned ? `<div class="hint">แจกงาน: ${r.assigned}</div>` : ''}
           ${canEdit ? `<div class="card-actions">
               <button class="btn-small edit-btn">แก้ไข</button>
@@ -644,6 +798,7 @@
                 <button class="btn-tiny status-red" data-status="หน้างานไม่พร้อม">🔴 ไม่พร้อม</button>
                 <button class="btn-tiny status-blue" data-status="หน้างานพร้อม">🔵 พร้อมแล้ว</button>
               </div>
+              ${r.note ? `<div class="site-note-log">${escapeHtml(r.note)}</div>` : ''}
             </div>` : ''}
         `;
         if (canEdit) {
