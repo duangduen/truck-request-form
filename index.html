@@ -325,6 +325,38 @@
 
   #assign-modal-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
   #assign-modal-confirm { background: var(--primary); border: none; color: white; }
+
+  .assign-chip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f4f6f5;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+  .assign-chip button {
+    background: transparent;
+    border: none;
+    color: var(--error);
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+  }
+  #assign-add-driver-btn {
+    width: 100%;
+    margin-bottom: 10px;
+    background: transparent;
+    border: 1px dashed var(--primary);
+    color: var(--primary-dark);
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -447,14 +479,17 @@
   <div id="dispatch-list"><p class="hint">กำลังโหลด...</p></div>
 </div>
 
-<!-- ============ กล่องเลือกคนขับตอนจัดคิว ============ -->
+<!-- ============ กล่องเลือกคนขับตอนจัดคิว (เพิ่มได้หลายคัน ถ้างานนั้นต้องใช้รถมากกว่า 1 คัน) ============ -->
 <div id="assign-modal-overlay" class="modal-overlay">
   <div class="modal-box">
     <div class="modal-title">เลือกคนขับ/ทะเบียนรถ</div>
-    <div class="field" style="margin-bottom:4px;">
+    <div class="hint" id="assign-truck-hint" style="margin-bottom:8px;"></div>
+    <div id="assign-selected-list"></div>
+    <div class="field" style="margin-bottom:8px;">
       <input type="text" id="assign-driver-input" placeholder="พิมพ์เพื่อค้นหา หรือพิมพ์ชื่อ/ทะเบียนใหม่" autocomplete="off">
       <div class="dropdown-list" id="assign-driver-list"></div>
     </div>
+    <button type="button" id="assign-add-driver-btn">+ เพิ่มคันนี้เข้าลิสต์</button>
     <div class="modal-actions">
       <button type="button" id="assign-modal-cancel">ยกเลิก</button>
       <button type="button" id="assign-modal-confirm">ยืนยันจัดคิว</button>
@@ -505,8 +540,10 @@
   let lineProfile = null;
   let editingRequestId = null;
   let optionsData = { requesters: [], sites: [], materials: [], sources: [] };
-  let driversData = [];
+  let driversData = []; // แต่ละตัวเป็น {label, exclude, note} - exclude ใช้เทียบกับวัสดุของคำขอเพื่อเตือน ⚠️
   let assigningRequestId = null;
+  let assignedDrivers = []; // คันที่เพิ่มไว้แล้วในกล่องจัดคิวปัจจุบัน (รองรับมากกว่า 1 คันต่องาน)
+  let currentAssignMaterial = ''; // วัสดุของคำขอที่กำลังจัดคิวอยู่ ใช้เช็คว่ารถคันที่เลือกวิ่งวัสดุนี้ได้ไหม
 
   // ---------- LIFF init ----------
   async function initLiff() {
@@ -566,6 +603,45 @@
     } catch (err) {
       console.error('โหลดตัวเลือกไม่สำเร็จ', err);
     }
+  }
+
+  // ---------- searchable dropdown เฉพาะช่องเลือกคนขับ (แสดงหมายเหตุ/เตือน ⚠️ ต่อรายการ) ----------
+  function setupDriverSearchable(inputId, listId, getDrivers, getMaterial) {
+    const input = document.getElementById(inputId);
+    const list = document.getElementById(listId);
+
+    function render(filterText) {
+      const drivers = getDrivers();
+      const material = getMaterial();
+      const filtered = filterText
+        ? drivers.filter(d => d.label.toLowerCase().includes(filterText.toLowerCase()))
+        : drivers;
+
+      list.innerHTML = '';
+      if (filtered.length === 0) { list.style.display = 'none'; return; }
+
+      filtered.slice(0, 30).forEach(driver => {
+        const risky = driverConflictsWithMaterial(driver, material);
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.innerHTML = `
+          <div>${escapeHtml(driver.label)}</div>
+          ${driver.note ? `<div style="font-size:11px;color:var(--text-muted);">${escapeHtml(driver.note)}</div>` : ''}
+          ${risky ? `<div style="font-size:11px;color:var(--error);font-weight:700;">⚠️ ปกติไม่วิ่งวัสดุนี้ (${escapeHtml(driver.exclude.join(', '))})</div>` : ''}
+        `;
+        item.addEventListener('mousedown', (ev) => {
+          ev.preventDefault();
+          input.value = driver.label;
+          list.style.display = 'none';
+        });
+        list.appendChild(item);
+      });
+      list.style.display = 'block';
+    }
+
+    input.addEventListener('input', () => render(input.value));
+    input.addEventListener('focus', () => render(input.value));
+    input.addEventListener('blur', () => setTimeout(() => { list.style.display = 'none'; }, 150));
   }
 
   // ---------- searchable dropdown ----------
@@ -1008,7 +1084,7 @@
             <button class="btn-small cancel-btn dispatch-cancel-btn">ยกเลิกคำขอนี้</button>
           </div>
         `;
-        card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId));
+        card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material));
         card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
         container.appendChild(card);
       });
@@ -1017,12 +1093,66 @@
     }
   }
 
-  function openAssignModal(requestId) {
+  function openAssignModal(requestId, truckCount, material) {
     assigningRequestId = requestId;
+    assignedDrivers = [];
+    currentAssignMaterial = material || '';
     document.getElementById('assign-driver-input').value = '';
+    document.getElementById('assign-truck-hint').textContent =
+      truckCount ? `ช่างระบุว่าต้องการรถ ${truckCount} คัน (ปรับได้ตามจริงหน้างาน)` : '';
+    renderAssignSelectedList();
     document.getElementById('assign-modal-overlay').classList.add('active');
     setTimeout(() => document.getElementById('assign-driver-input').focus(), 50);
   }
+
+  // เช็คว่ารถคันนี้มีข้อจำกัด "ห้ามวิ่ง" ที่ตรงกับวัสดุของคำขอปัจจุบันไหม (จับคู่แบบ substring ไม่สนตัวพิมพ์เล็ก/ใหญ่)
+  function driverConflictsWithMaterial(driver, material) {
+    if (!material || !driver.exclude || driver.exclude.length === 0) return false;
+    const materialLower = material.toLowerCase();
+    return driver.exclude.some(term => term && materialLower.includes(term.toLowerCase()));
+  }
+
+  function renderAssignSelectedList() {
+    const container = document.getElementById('assign-selected-list');
+    container.innerHTML = '';
+    assignedDrivers.forEach((driver, idx) => {
+      const chip = document.createElement('div');
+      chip.className = 'assign-chip';
+      chip.innerHTML = `<span>${escapeHtml(driver)}</span><button type="button" aria-label="ลบ">×</button>`;
+      chip.querySelector('button').addEventListener('click', () => {
+        assignedDrivers.splice(idx, 1);
+        renderAssignSelectedList();
+      });
+      container.appendChild(chip);
+    });
+  }
+
+  function addDriverToAssignList() {
+    const input = document.getElementById('assign-driver-input');
+    const value = input.value.trim();
+    if (!value) return;
+
+    // ถ้าค่าที่พิมพ์/เลือกตรงกับรถที่มีข้อจำกัดชนกับวัสดุของงานนี้ ให้เตือนก่อนเพิ่มจริง
+    const match = driversData.find(d => d.label === value);
+    if (match && driverConflictsWithMaterial(match, currentAssignMaterial)) {
+      const ok = confirm(
+        `⚠️ ${match.label} ปกติไม่วิ่ง "${currentAssignMaterial}"\nข้อจำกัด: ${match.exclude.join(', ')}\n\nยืนยันจะเพิ่มคันนี้อยู่ดีไหม?`
+      );
+      if (!ok) return;
+    }
+
+    assignedDrivers.push(value);
+    input.value = '';
+    renderAssignSelectedList();
+    input.focus();
+  }
+
+  document.getElementById('assign-add-driver-btn').addEventListener('click', addDriverToAssignList);
+
+  // กด Enter ในช่องพิมพ์คนขับ = เพิ่มเข้าลิสต์เลย (เร็วกว่าต้องกดปุ่ม + ทุกครั้งตอนใส่หลายคัน)
+  document.getElementById('assign-driver-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addDriverToAssignList(); }
+  });
 
   document.getElementById('assign-modal-cancel').addEventListener('click', () => {
     document.getElementById('assign-modal-overlay').classList.remove('active');
@@ -1030,9 +1160,14 @@
   });
 
   document.getElementById('assign-modal-confirm').addEventListener('click', async () => {
-    const assigned = document.getElementById('assign-driver-input').value.trim();
-    if (!assigned) { alert('กรุณาเลือก/พิมพ์คนขับก่อน'); return; }
+    // ถ้ายังพิมพ์ค้างในช่องแต่ลืมกด + ให้เก็บเข้าลิสต์ให้อัตโนมัติก่อนยืนยัน
+    const leftover = document.getElementById('assign-driver-input').value.trim();
+    if (leftover) addDriverToAssignList();
+
+    if (assignedDrivers.length === 0) { alert('กรุณาเพิ่มคนขับ/รถอย่างน้อย 1 คัน'); return; }
     if (!assigningRequestId) return;
+
+    const assigned = assignedDrivers.join(', ');
 
     try {
       const res = await fetch(APPS_SCRIPT_URL, {
@@ -1090,7 +1225,7 @@
   setupSearchable('site-input', 'site-list', () => optionsData.sites);
   setupSearchable('material-input', 'material-list', () => optionsData.materials);
   setupSearchable('source-input', 'source-list', () => optionsData.sources);
-  setupSearchable('assign-driver-input', 'assign-driver-list', () => driversData);
+  setupDriverSearchable('assign-driver-input', 'assign-driver-list', () => driversData, () => currentAssignMaterial);
 
   initLiff();
   loadOptions();
