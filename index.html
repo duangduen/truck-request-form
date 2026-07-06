@@ -183,9 +183,9 @@
     display: none;
   }
 
-  /* ====== คำขอของฉัน ====== */
-  #my-requests-view { padding: 16px; display: none; flex-direction: column; gap: 12px; }
-  #my-requests-view.active { display: flex; }
+  /* ====== คำขอของฉัน / จัดคิว ====== */
+  #my-requests-view, #dispatch-view { padding: 16px; display: none; flex-direction: column; gap: 12px; }
+  #my-requests-view.active, #dispatch-view.active { display: flex; }
 
   .request-card {
     background: var(--card);
@@ -322,6 +322,9 @@
   #map-picker { width: 100%; height: 280px; border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
   #map-modal-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
   #map-modal-confirm { background: var(--primary); border: none; color: white; }
+
+  #assign-modal-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
+  #assign-modal-confirm { background: var(--primary); border: none; color: white; }
 </style>
 </head>
 <body>
@@ -334,6 +337,7 @@
 <div class="tabs">
   <button class="tab-btn active" data-tab="form-view">ส่งคำขอใหม่</button>
   <button class="tab-btn" data-tab="my-requests-view">คำขอของฉัน</button>
+  <button class="tab-btn" data-tab="dispatch-view" id="dispatch-tab-btn" style="display:none;">จัดคิว</button>
 </div>
 
 <div id="profile-bar"><span id="loading-profile">กำลังโหลดข้อมูลผู้ใช้...</span></div>
@@ -437,6 +441,27 @@
   <div id="my-requests-list"><p class="hint">กำลังโหลด...</p></div>
 </div>
 
+<!-- ============ แท็บ 3: จัดคิว (เฉพาะฝ่ายจัดคิว - ซ่อนไว้จนกว่าจะเช็คสิทธิ์ผ่าน) ============ -->
+<div id="dispatch-view" class="view">
+  <button id="dispatch-refresh-btn">รีเฟรช</button>
+  <div id="dispatch-list"><p class="hint">กำลังโหลด...</p></div>
+</div>
+
+<!-- ============ กล่องเลือกคนขับตอนจัดคิว ============ -->
+<div id="assign-modal-overlay" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-title">เลือกคนขับ/ทะเบียนรถ</div>
+    <div class="field" style="margin-bottom:4px;">
+      <input type="text" id="assign-driver-input" placeholder="พิมพ์เพื่อค้นหา หรือพิมพ์ชื่อ/ทะเบียนใหม่" autocomplete="off">
+      <div class="dropdown-list" id="assign-driver-list"></div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" id="assign-modal-cancel">ยกเลิก</button>
+      <button type="button" id="assign-modal-confirm">ยืนยันจัดคิว</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ กล่องปักหมุดเลือกตำแหน่งบนแผนที่ ============ -->
 <div id="map-modal-overlay" class="modal-overlay">
   <div class="modal-box map-modal-box">
@@ -480,6 +505,8 @@
   let lineProfile = null;
   let editingRequestId = null;
   let optionsData = { requesters: [], sites: [], materials: [], sources: [] };
+  let driversData = [];
+  let assigningRequestId = null;
 
   // ---------- LIFF init ----------
   async function initLiff() {
@@ -496,9 +523,37 @@
       `;
       const reqInput = document.getElementById('requester-input');
       if (!reqInput.value) reqInput.value = lineProfile.displayName;
+
+      checkDispatcherAndSetup(); // เผยแท็บ "จัดคิว" ถ้า LINE User ID นี้อยู่ในลิสต์ฝ่ายจัดคิว
     } catch (err) {
       document.getElementById('profile-bar').innerHTML =
         '<span style="color:#d64545">โหลดโปรไฟล์ LINE ไม่สำเร็จ (เปิดนอกแอป LINE หรือยังไม่ได้ตั้งค่า LIFF_ID)</span>';
+    }
+  }
+
+  // เช็คฝั่งเซิร์ฟเวอร์ว่าเป็นฝ่ายจัดคิวไหม (การซ่อน/โชว์แท็บฝั่งนี้เป็นแค่ UX
+  // ตัว Code.gs เช็คสิทธิ์ซ้ำทุกครั้งที่สั่งจัดคิว/ยกเลิกอยู่แล้ว ไม่ได้พึ่งการซ่อนนี้เป็นเกราะป้องกันจริง)
+  async function checkDispatcherAndSetup() {
+    if (!lineProfile) return;
+    try {
+      const res = await fetch(APPS_SCRIPT_URL + '?action=checkDispatcher&userId=' + encodeURIComponent(lineProfile.userId));
+      const result = await res.json();
+      if (result.status === 'ok' && result.isDispatcher) {
+        document.getElementById('dispatch-tab-btn').style.display = '';
+        loadDrivers();
+      }
+    } catch (err) {
+      console.error('เช็คสิทธิ์ฝ่ายจัดคิวไม่สำเร็จ', err);
+    }
+  }
+
+  async function loadDrivers() {
+    try {
+      const res = await fetch(APPS_SCRIPT_URL + '?action=drivers');
+      const result = await res.json();
+      if (result.status === 'ok') driversData = result.drivers;
+    } catch (err) {
+      console.error('โหลดรายชื่อคนขับไม่สำเร็จ', err);
     }
   }
 
@@ -919,6 +974,105 @@
 
   document.getElementById('refresh-btn').addEventListener('click', loadMyRequests);
 
+  // ---------- แท็บ "จัดคิว" (เฉพาะฝ่ายจัดคิว) ----------
+  async function loadPendingRequests() {
+    const container = document.getElementById('dispatch-list');
+    container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
+
+    try {
+      const res = await fetch(APPS_SCRIPT_URL + '?action=pendingRequests&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''));
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+
+      if (result.requests.length === 0) {
+        container.innerHTML = '<p class="hint">ไม่มีคำขอที่รอจัดคิว</p>';
+        return;
+      }
+
+      container.innerHTML = '';
+      result.requests.forEach(r => {
+        const card = document.createElement('div');
+        card.className = 'request-card';
+        card.innerHTML = `
+          <div class="request-card-header">
+            <span class="status-badge status-pending">รอจัดคิว</span>
+            <span class="hint">${escapeHtml(r.requestedAt)}</span>
+          </div>
+          <div><strong>${escapeHtml(r.site)}</strong> — ผู้ขอ: ${escapeHtml(r.requester)}</div>
+          <div>${escapeHtml(r.material)} ${escapeHtml(String(r.quantity))} ${escapeHtml(r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
+          ${r.detail ? `<div class="hint">${escapeHtml(r.detail)}</div>` : ''}
+          ${r.phone ? `<div class="hint">โทร: ${escapeHtml(r.phone)}</div>` : ''}
+          ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
+          <div class="card-actions">
+            <button class="btn-small edit-btn assign-btn">จัดคิว</button>
+            <button class="btn-small cancel-btn dispatch-cancel-btn">ยกเลิกคำขอนี้</button>
+          </div>
+        `;
+        card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId));
+        card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
+        container.appendChild(card);
+      });
+    } catch (err) {
+      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + err.message + '</p>';
+    }
+  }
+
+  function openAssignModal(requestId) {
+    assigningRequestId = requestId;
+    document.getElementById('assign-driver-input').value = '';
+    document.getElementById('assign-modal-overlay').classList.add('active');
+    setTimeout(() => document.getElementById('assign-driver-input').focus(), 50);
+  }
+
+  document.getElementById('assign-modal-cancel').addEventListener('click', () => {
+    document.getElementById('assign-modal-overlay').classList.remove('active');
+    assigningRequestId = null;
+  });
+
+  document.getElementById('assign-modal-confirm').addEventListener('click', async () => {
+    const assigned = document.getElementById('assign-driver-input').value.trim();
+    if (!assigned) { alert('กรุณาเลือก/พิมพ์คนขับก่อน'); return; }
+    if (!assigningRequestId) return;
+
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'assignFromApp',
+          requestId: assigningRequestId,
+          assigned,
+          lineUserId: lineProfile ? lineProfile.userId : ''
+        })
+      });
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+      document.getElementById('assign-modal-overlay').classList.remove('active');
+      assigningRequestId = null;
+      loadPendingRequests();
+    } catch (err) {
+      alert('จัดคิวไม่สำเร็จ: ' + err.message);
+    }
+  });
+
+  async function doDispatchCancel(requestId) {
+    if (!confirm('ยืนยันยกเลิกคำขอนี้? ระบบจะแจ้งช่างที่ขอไว้ทันที')) return;
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'cancelFromApp', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
+      });
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+      loadPendingRequests();
+    } catch (err) {
+      alert('ยกเลิกไม่สำเร็จ: ' + err.message);
+    }
+  }
+
+  document.getElementById('dispatch-refresh-btn').addEventListener('click', loadPendingRequests);
+
   // ---------- tab switching ----------
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -927,6 +1081,7 @@
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       document.getElementById(btn.dataset.tab).classList.add('active');
       if (btn.dataset.tab === 'my-requests-view') loadMyRequests();
+      if (btn.dataset.tab === 'dispatch-view') loadPendingRequests();
     });
   });
 
@@ -935,6 +1090,7 @@
   setupSearchable('site-input', 'site-list', () => optionsData.sites);
   setupSearchable('material-input', 'material-list', () => optionsData.materials);
   setupSearchable('source-input', 'source-list', () => optionsData.sources);
+  setupSearchable('assign-driver-input', 'assign-driver-list', () => driversData);
 
   initLiff();
   loadOptions();
