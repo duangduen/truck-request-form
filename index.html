@@ -208,6 +208,7 @@
   .status-pending { background: #fff4e0; color: var(--warn); }
   .status-cancelled { background: #f1f1f1; color: var(--text-muted); }
   .status-done { background: #e6f9ee; color: var(--primary-dark); }
+  .status-assigned { background: #e6f9ee; color: var(--primary-dark); }
 
   .card-actions { display: flex; gap: 8px; margin-top: 10px; }
   .btn-small {
@@ -496,7 +497,7 @@
 <!-- ============ กล่องเลือกคนขับตอนจัดคิว (ติ๊กเลือกได้หลายคันพร้อมกัน) ============ -->
 <div id="assign-modal-overlay" class="modal-overlay">
   <div class="modal-box map-modal-box">
-    <div class="modal-title">เลือกคนขับ/ทะเบียนรถ</div>
+    <div class="modal-title" id="assign-modal-title">เลือกคนขับ/ทะเบียนรถ</div>
     <div class="hint" id="assign-truck-hint" style="margin-bottom:8px;"></div>
 
     <input type="text" id="assign-filter-input" placeholder="พิมพ์เพื่อกรองรายชื่อ..." autocomplete="off"
@@ -516,7 +517,7 @@
 
     <div class="modal-actions">
       <button type="button" id="assign-modal-cancel">ยกเลิก</button>
-      <button type="button" id="assign-modal-confirm">ยืนยันจัดคิว (<span id="assign-selected-count">0</span> คัน)</button>
+      <button type="button" id="assign-modal-confirm"><span id="assign-confirm-label">ยืนยันจัดคิว</span> (<span id="assign-selected-count">0</span> คัน)</button>
     </div>
   </div>
 </div>
@@ -1037,6 +1038,7 @@
   document.getElementById('refresh-btn').addEventListener('click', loadMyRequests);
 
   // ---------- แท็บ "จัดคิว" (เฉพาะฝ่ายจัดคิว) ----------
+  // แสดง 2 กลุ่ม: "รอจัดคิว" (จัดคิวครั้งแรก) และ "จัดคิวแล้ว" (แก้ไขคนขับ/ทะเบียนรถ หรือยกเลิกได้จากตรงนี้เลย ไม่ต้องเข้าชีต)
   async function loadPendingRequests() {
     const container = document.getElementById('dispatch-list');
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
@@ -1046,40 +1048,83 @@
       const result = await res.json();
       if (result.status !== 'ok') throw new Error(result.message);
 
-      if (result.requests.length === 0) {
-        container.innerHTML = '<p class="hint">ไม่มีคำขอที่รอจัดคิว</p>';
+      const pending = result.requests.filter(r => r.status === 'รอจัดคิว');
+      const queued = result.requests.filter(r => r.status === 'จัดคิวแล้ว');
+
+      if (pending.length === 0 && queued.length === 0) {
+        container.innerHTML = '<p class="hint">ไม่มีคำขอที่ต้องจัดการตอนนี้</p>';
         return;
       }
 
       container.innerHTML = '';
-      result.requests.forEach(r => {
-        const card = document.createElement('div');
-        card.className = 'request-card';
-        card.innerHTML = `
-          <div class="request-card-header">
-            <span class="status-badge status-pending">รอจัดคิว</span>
-            <span class="hint">${escapeHtml(r.requestedAt)}</span>
-          </div>
-          <div><strong>${escapeHtml(r.site)}</strong> — ผู้ขอ: ${escapeHtml(r.requester)}</div>
-          <div>${escapeHtml(r.material)} ${escapeHtml(String(r.quantity))} ${escapeHtml(r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
-          ${r.detail ? `<div class="hint">${escapeHtml(r.detail)}</div>` : ''}
-          ${r.phone ? `<div class="hint">โทร: ${escapeHtml(r.phone)}</div>` : ''}
-          ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
-          <div class="card-actions">
-            <button class="btn-small edit-btn assign-btn">จัดคิว</button>
-            <button class="btn-small cancel-btn dispatch-cancel-btn">ยกเลิกคำขอนี้</button>
-          </div>
-        `;
-        card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material));
-        card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
-        container.appendChild(card);
-      });
+
+      if (pending.length > 0) {
+        const heading = document.createElement('div');
+        heading.style.cssText = 'font-weight:700;margin:4px 0 8px;font-size:14px;';
+        heading.textContent = `รอจัดคิว (${pending.length})`;
+        container.appendChild(heading);
+        pending.forEach(r => container.appendChild(buildPendingCard(r)));
+      }
+
+      if (queued.length > 0) {
+        const heading = document.createElement('div');
+        heading.style.cssText = 'font-weight:700;margin:20px 0 8px;font-size:14px;';
+        heading.textContent = `จัดคิวแล้ว (${queued.length})`;
+        container.appendChild(heading);
+        queued.forEach(r => container.appendChild(buildQueuedCard(r)));
+      }
     } catch (err) {
       container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + err.message + '</p>';
     }
   }
 
-  function openAssignModal(requestId, truckCount, material) {
+  function buildPendingCard(r) {
+    const card = document.createElement('div');
+    card.className = 'request-card';
+    card.innerHTML = `
+      <div class="request-card-header">
+        <span class="status-badge status-pending">รอจัดคิว</span>
+        <span class="hint">${escapeHtml(r.requestedAt)}</span>
+      </div>
+      <div><strong>${escapeHtml(r.site)}</strong> — ผู้ขอ: ${escapeHtml(r.requester)}</div>
+      <div>${escapeHtml(r.material)} ${escapeHtml(String(r.quantity))} ${escapeHtml(r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
+      ${r.detail ? `<div class="hint">${escapeHtml(r.detail)}</div>` : ''}
+      ${r.phone ? `<div class="hint">โทร: ${escapeHtml(r.phone)}</div>` : ''}
+      ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
+      <div class="card-actions">
+        <button class="btn-small edit-btn assign-btn">จัดคิว</button>
+        <button class="btn-small cancel-btn dispatch-cancel-btn">ยกเลิกคำขอนี้</button>
+      </div>
+    `;
+    card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material));
+    card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
+    return card;
+  }
+
+  function buildQueuedCard(r) {
+    const card = document.createElement('div');
+    card.className = 'request-card';
+    card.innerHTML = `
+      <div class="request-card-header">
+        <span class="status-badge status-assigned">จัดคิวแล้ว</span>
+        <span class="hint">${escapeHtml(r.requestedAt)}</span>
+      </div>
+      <div><strong>${escapeHtml(r.site)}</strong> — ผู้ขอ: ${escapeHtml(r.requester)}</div>
+      <div>${escapeHtml(r.material)} ${escapeHtml(String(r.quantity))} ${escapeHtml(r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
+      <div class="hint">🚚 แจกงาน: ${escapeHtml(r.assigned || '-')}</div>
+      ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
+      <div class="card-actions">
+        <button class="btn-small edit-btn assign-btn">แก้ไขการจัดคิว</button>
+        <button class="btn-small cancel-btn dispatch-cancel-btn">ยกเลิกคำขอนี้</button>
+      </div>
+    `;
+    card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material, r.assigned));
+    card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
+    return card;
+  }
+
+  // existingAssigned: ถ้ามีค่า แปลว่าเป็นการ "แก้ไขการจัดคิว" ของงานที่จัดไปแล้ว - เอามาติ๊กพรีฟิลให้เลย
+  function openAssignModal(requestId, truckCount, material, existingAssigned) {
     assigningRequestId = requestId;
     selectedDriverLabels = new Set();
     assignCustomEntries = [];
@@ -1088,6 +1133,21 @@
     document.getElementById('assign-custom-input').value = '';
     document.getElementById('assign-truck-hint').textContent =
       truckCount ? `ช่างระบุว่าต้องการรถ ${truckCount} คัน (ปรับได้ตามจริงหน้างาน)` : '';
+
+    const isEdit = !!(existingAssigned && existingAssigned.trim());
+    document.getElementById('assign-modal-title').textContent =
+      isEdit ? 'แก้ไขการจัดคิว (คนขับ/ทะเบียนรถ)' : 'เลือกคนขับ/ทะเบียนรถ';
+    document.getElementById('assign-confirm-label').textContent =
+      isEdit ? 'บันทึกการแก้ไข' : 'ยืนยันจัดคิว';
+
+    if (isEdit) {
+      const knownLabels = new Set(driversData.map(d => d.label));
+      existingAssigned.split(',').map(s => s.trim()).filter(Boolean).forEach(token => {
+        if (knownLabels.has(token)) selectedDriverLabels.add(token);
+        else assignCustomEntries.push(token);
+      });
+    }
+
     renderAssignCheckboxList('');
     renderAssignCustomList();
     updateAssignSelectedCount();
