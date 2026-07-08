@@ -463,6 +463,11 @@
         <label>วันเริ่มงานที่ต้องการรถ <span class="required">*</span></label>
         <input type="date" id="start-date">
       </div>
+      <div class="field">
+        <label>วันที่คาดว่าจะเสร็จ (ถ้ารู้)</label>
+        <input type="date" id="expected-end-date">
+        <div class="hint">ไม่บังคับ ใส่เฉพาะงานที่ต้องวิ่งหลายวัน เช่น ดิน 100 เที่ยว จะช่วยให้ฝ่ายจัดคิววางแผนล่วงหน้าได้</div>
+      </div>
     </div>
 
     <div class="field">
@@ -785,6 +790,7 @@
       requester: document.getElementById('requester-input').value.trim(),
       site: document.getElementById('site-input').value.trim(),
       startDate: document.getElementById('start-date').value,
+      expectedEndDate: document.getElementById('expected-end-date').value,
       material: document.getElementById('material-input').value.trim(),
       quantity: document.getElementById('quantity').value,
       unit: document.getElementById('unit').value,
@@ -837,6 +843,7 @@
     document.getElementById('requester-input').value = r.requester || '';
     document.getElementById('site-input').value = r.site || '';
     document.getElementById('start-date').value = r.startDate || '';
+    document.getElementById('expected-end-date').value = r.expectedEndDate || '';
     document.getElementById('material-input').value = r.material || '';
     document.getElementById('quantity').value = r.quantity || '';
     document.getElementById('unit').value = r.unit || '';
@@ -849,6 +856,24 @@
     document.getElementById('submit-btn').textContent = 'บันทึกการแก้ไข';
     document.getElementById('cancel-edit-btn').style.display = 'block';
     document.getElementById('form-title-hint').style.display = 'block';
+  }
+
+  function doMarkProgressDone(requestId) {
+    if (!confirm('ยืนยันว่าส่งงานนี้ครบแล้ว? รายการนี้จะไม่โผล่ในสรุปคิวรถของฝ่ายจัดคิวอีกตั้งแต่วันถัดไป')) return;
+    runOnce('markDone:' + requestId, async () => {
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'markProgressDone', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        loadMyRequests();
+      } catch (err) {
+        alert('แจ้งไม่สำเร็จ: ' + err.message);
+      }
+    });
   }
 
   function doCancel(requestId) {
@@ -1071,6 +1096,7 @@
       result.requests.forEach(r => {
         const canEdit = r.status === 'รอจัดคิว';
         const canUpdateSite = r.status.indexOf('ยกเลิก') === -1;
+        const canMarkDone = r.status === 'จัดคิวแล้ว' && r.progressStatus === 'กำลังส่ง';
         const card = document.createElement('div');
         card.className = 'request-card';
         card.innerHTML = `
@@ -1080,11 +1106,16 @@
           </div>
           <div><strong>${r.site}</strong></div>
           <div>${r.material} ${r.quantity} ${r.unit} — วันเริ่มงาน ${r.startDate}</div>
+          ${r.expectedEndDate ? `<div class="hint">คาดว่าจะเสร็จ: ${escapeHtml(r.expectedEndDate)}</div>` : ''}
           ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
           ${r.assigned ? `<div class="hint">แจกงาน: ${r.assigned}</div>` : ''}
+          ${r.progressStatus && r.status.indexOf('ยกเลิก') === -1 ? `<div class="hint">ความคืบหน้า: ${escapeHtml(r.progressStatus)}</div>` : ''}
           ${canEdit ? `<div class="card-actions">
               <button class="btn-small edit-btn">แก้ไข</button>
               <button class="btn-small cancel-btn">ยกเลิก</button>
+            </div>` : ''}
+          ${canMarkDone ? `<div class="card-actions">
+              <button class="btn-small edit-btn mark-done-btn">✅ แจ้งส่งงานครบแล้ว</button>
             </div>` : ''}
           ${canUpdateSite ? `
             <div class="site-status-section">
@@ -1103,6 +1134,9 @@
         if (canEdit) {
           card.querySelector('.edit-btn').addEventListener('click', () => startEdit(r));
           card.querySelector('.cancel-btn').addEventListener('click', () => doCancel(r.requestId));
+        }
+        if (canMarkDone) {
+          card.querySelector('.mark-done-btn').addEventListener('click', () => doMarkProgressDone(r.requestId));
         }
         if (canUpdateSite) {
           card.querySelectorAll('.btn-tiny').forEach(btn => {
@@ -1445,8 +1479,9 @@
     summary.siteGroups.forEach(g => {
       const card = document.createElement('div');
       card.className = 'summary-group-card';
+      const dayLabel = g.dayInfo ? ` <span class="hint">(วันที่ ${g.dayInfo.dayNumber}/${g.dayInfo.totalDays}, เหลืออีก ${g.dayInfo.remainingDays} วัน)</span>` : '';
       card.innerHTML = `
-        <div class="summary-group-title">🚧 ${escapeHtml(g.site)}</div>
+        <div class="summary-group-title">🚧 ${escapeHtml(g.site)}${dayLabel}</div>
         <div>${escapeHtml(g.trucks.join(', '))}</div>
       `;
       container.appendChild(card);
@@ -1515,15 +1550,28 @@
     const dayBadge = getThaiDayBadge(summary.date);
     const lines = [`${dayBadge.emoji} สรุปคิวรถ วัน${dayBadge.name}ที่ ${summary.date}`, ''];
     summary.siteGroups.forEach(g => {
-      lines.push(`🚧 ${g.site}`);
+      const dayLabel = g.dayInfo ? ` (วันที่ ${g.dayInfo.dayNumber}/${g.dayInfo.totalDays}, เหลืออีก ${g.dayInfo.remainingDays} วัน)` : '';
+      lines.push(`🚧 ${g.site}${dayLabel}`);
       lines.push(g.trucks.join(', '));
       lines.push('');
     });
+    const manualSiteGroups = {};
     const byStatus = {};
     summary.remaining.forEach(r => {
-      const key = r.status || 'ยังไม่ระบุสถานะ';
-      if (!byStatus[key]) byStatus[key] = [];
-      byStatus[key].push(r.label + (r.note ? ` (${r.note})` : ''));
+      if (r.status === 'ไปหน้างาน') {
+        const site = r.note || 'ไปหน้างาน (ยังไม่ระบุชื่อหน้างานในหมายเหตุ)';
+        if (!manualSiteGroups[site]) manualSiteGroups[site] = [];
+        manualSiteGroups[site].push(r.label);
+      } else {
+        const key = r.status || 'ยังไม่ระบุสถานะ';
+        if (!byStatus[key]) byStatus[key] = [];
+        byStatus[key].push(r.label + (r.note ? ` (${r.note})` : ''));
+      }
+    });
+    Object.keys(manualSiteGroups).forEach(site => {
+      lines.push(`🚧 ${site}`);
+      lines.push(manualSiteGroups[site].join(', '));
+      lines.push('');
     });
     const icons = { 'หยุด': '⏸', 'จอด': '🅿️', 'ซ่อม': '🔧', 'เข้าแพล้นท์/เช็คซ่อม': '🏭', 'ยังไม่ระบุสถานะ': '❔' };
     Object.keys(byStatus).forEach(key => {
