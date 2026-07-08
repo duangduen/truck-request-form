@@ -1479,10 +1479,15 @@
     summary.siteGroups.forEach(g => {
       const card = document.createElement('div');
       card.className = 'summary-group-card';
+      if (g.isContinuing) card.style.cssText = 'border-color:#e0a530;background:#fff9ec;';
       const dayLabel = g.dayInfo ? ` <span class="hint">(วันที่ ${g.dayInfo.dayNumber}/${g.dayInfo.totalDays}, เหลืออีก ${g.dayInfo.remainingDays} วัน)</span>` : '';
+      const reconfirmNote = g.isContinuing
+        ? `<div class="hint" style="color:#a1671b;margin-top:4px;">⚠️ งานต่อเนื่องจากวันก่อน — ทบทวนทีมงานวันนี้อีกครั้ง (คนขับหยุด/รถเสียหรือเปล่า) แก้ไขได้ที่แท็บ "รายการคำขอ" &gt; "จัดคิวแล้ว" &gt; "แก้ไขการจัดคิว"</div>`
+        : '';
       card.innerHTML = `
         <div class="summary-group-title">🚧 ${escapeHtml(g.site)}${dayLabel}</div>
         <div>${escapeHtml(g.trucks.join(', '))}</div>
+        ${reconfirmNote}
       `;
       container.appendChild(card);
     });
