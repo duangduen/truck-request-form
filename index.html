@@ -1497,9 +1497,21 @@
     container.appendChild(sendBtn);
   }
 
+  // สีวงกลมประจำวัน (ธรรมเนียมสีวันไทย) ให้ตรงกับฝั่งเซิร์ฟเวอร์ทุกประการ (ชมพู/ฟ้า ไม่มีอิโมจิวงกลมตรงสีในยูนิโค้ด เลยใช้ตัวที่ใกล้เคียงที่สุดแทน)
+  const THAI_DAY_NAMES = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  const THAI_DAY_COLOR_EMOJI = ['🔴', '🟡', '🩷', '🟢', '🟠', '🔵', '🟣'];
+
+  function getThaiDayBadge(dateStr) {
+    const parts = String(dateStr).split('-'); // yyyy-MM-dd
+    const dateObj = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    const dayIndex = dateObj.getDay();
+    return { emoji: THAI_DAY_COLOR_EMOJI[dayIndex], name: THAI_DAY_NAMES[dayIndex] };
+  }
+
   // พรีวิวข้อความฝั่งแอป (รูปแบบเดียวกับที่ฝั่งเซิร์ฟเวอร์จะสร้างจริงตอนกดส่ง)
   function buildSummaryPreviewText(summary) {
-    const lines = [`📋 สรุปคิวรถ วันที่ ${summary.date}`, ''];
+    const dayBadge = getThaiDayBadge(summary.date);
+    const lines = [`${dayBadge.emoji} สรุปคิวรถ วัน${dayBadge.name}ที่ ${summary.date}`, ''];
     summary.siteGroups.forEach(g => {
       lines.push(`🚧 ${g.site}`);
       lines.push(g.trucks.join(', '));
