@@ -633,6 +633,19 @@
   let assigningRequestId = null;
   let selectedDriverLabels = new Set(); // คันที่ติ๊กเลือกไว้แล้วในกล่องจัดคิวปัจจุบัน (จากลิสต์ที่มีอยู่)
   let assignCustomEntries = []; // คนขับ/รถที่พิมพ์เพิ่มเอง (ไม่มีในลิสต์)
+
+  // กันกดปุ่มซ้ำ/ดับเบิ้ลระหว่างรอผลลัพธ์จากเซิร์ฟเวอร์ (เช่นตอนเน็ตช้า LockService รอคิวจากคำขออื่น)
+  // ใช้ key เดียวกันสำหรับปุ่มเดียวกัน ถ้ายังมีคำขอเดิมค้างอยู่ในคิว จะไม่ยิงซ้ำซ้อนออกไปอีก
+  const inFlightActions = new Set();
+  async function runOnce(key, fn) {
+    if (inFlightActions.has(key)) return;
+    inFlightActions.add(key);
+    try {
+      await fn();
+    } finally {
+      inFlightActions.delete(key);
+    }
+  }
   let currentAssignMaterial = ''; // วัสดุของคำขอที่กำลังจัดคิวอยู่ ใช้เช็คว่ารถคันที่เลือกวิ่งวัสดุนี้ได้ไหม
 
   // ---------- LIFF init ----------
@@ -838,20 +851,22 @@
     document.getElementById('form-title-hint').style.display = 'block';
   }
 
-  async function doCancel(requestId) {
+  function doCancel(requestId) {
     if (!confirm('ยืนยันยกเลิกคำขอนี้?')) return;
-    try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'cancel', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
-      });
-      const result = await res.json();
-      if (result.status !== 'ok') throw new Error(result.message);
-      loadMyRequests();
-    } catch (err) {
-      alert('ยกเลิกไม่สำเร็จ: ' + err.message);
-    }
+    runOnce('cancel:' + requestId, async () => {
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'cancel', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        loadMyRequests();
+      } catch (err) {
+        alert('ยกเลิกไม่สำเร็จ: ' + err.message);
+      }
+    });
   }
 
   // กล่องกรอกหมายเหตุของเราเอง ใช้แทน window.prompt() เพราะ prompt() เบราว์เซอร์จะ
@@ -1004,24 +1019,26 @@
   async function doUpdateSiteStatus(requestId, siteStatus) {
     const note = await openNoteModal('แจ้งสถานะ: ' + siteStatus);
     if (note === null) return; // กดยกเลิก
-    try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'updateSiteStatus',
-          requestId,
-          siteStatus,
-          note,
-          lineUserId: lineProfile ? lineProfile.userId : ''
-        })
-      });
-      const result = await res.json();
-      if (result.status !== 'ok') throw new Error(result.message);
-      loadMyRequests();
-    } catch (err) {
-      alert('อัปเดตไม่สำเร็จ: ' + err.message);
-    }
+    runOnce('siteStatus:' + requestId, async () => {
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'updateSiteStatus',
+            requestId,
+            siteStatus,
+            note,
+            lineUserId: lineProfile ? lineProfile.userId : ''
+          })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        loadMyRequests();
+      } catch (err) {
+        alert('อัปเดตไม่สำเร็จ: ' + err.message);
+      }
+    });
   }
 
   function siteStatusClass(siteStatus) {
@@ -1311,48 +1328,61 @@
     assigningRequestId = null;
   });
 
-  document.getElementById('assign-modal-confirm').addEventListener('click', async () => {
+  document.getElementById('assign-modal-confirm').addEventListener('click', () => {
     const assignedList = [...selectedDriverLabels, ...assignCustomEntries];
     if (assignedList.length === 0) { alert('กรุณาเลือก/เพิ่มคนขับอย่างน้อย 1 คัน'); return; }
     if (!assigningRequestId) return;
 
+    const requestId = assigningRequestId;
     const assigned = assignedList.join(', ');
+    const confirmBtn = document.getElementById('assign-modal-confirm');
+    const confirmLabel = document.getElementById('assign-confirm-label');
+    const originalLabel = confirmLabel.textContent;
 
-    try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'assignFromApp',
-          requestId: assigningRequestId,
-          assigned,
-          lineUserId: lineProfile ? lineProfile.userId : ''
-        })
-      });
-      const result = await res.json();
-      if (result.status !== 'ok') throw new Error(result.message);
-      document.getElementById('assign-modal-overlay').classList.remove('active');
-      assigningRequestId = null;
-      loadPendingRequests();
-    } catch (err) {
-      alert('จัดคิวไม่สำเร็จ: ' + err.message);
-    }
+    runOnce('assign:' + requestId, async () => {
+      confirmBtn.disabled = true;
+      confirmLabel.textContent = 'กำลังบันทึก...';
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'assignFromApp',
+            requestId,
+            assigned,
+            lineUserId: lineProfile ? lineProfile.userId : ''
+          })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        document.getElementById('assign-modal-overlay').classList.remove('active');
+        assigningRequestId = null;
+        loadPendingRequests();
+      } catch (err) {
+        alert('จัดคิวไม่สำเร็จ: ' + err.message);
+      } finally {
+        confirmBtn.disabled = false;
+        confirmLabel.textContent = originalLabel;
+      }
+    });
   });
 
-  async function doDispatchCancel(requestId) {
+  function doDispatchCancel(requestId) {
     if (!confirm('ยืนยันยกเลิกคำขอนี้? ระบบจะแจ้งช่างที่ขอไว้ทันที')) return;
-    try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'cancelFromApp', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
-      });
-      const result = await res.json();
-      if (result.status !== 'ok') throw new Error(result.message);
-      loadPendingRequests();
-    } catch (err) {
-      alert('ยกเลิกไม่สำเร็จ: ' + err.message);
-    }
+    runOnce('dispatchCancel:' + requestId, async () => {
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'cancelFromApp', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        loadPendingRequests();
+      } catch (err) {
+        alert('ยกเลิกไม่สำเร็จ: ' + err.message);
+      }
+    });
   }
 
   document.getElementById('dispatch-refresh-btn').addEventListener('click', loadPendingRequests);
@@ -1436,10 +1466,16 @@
           .join('');
         row.innerHTML = `
           <div>${escapeHtml(r.label)}</div>
-          <select>${optionsHtml}</select>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select>${optionsHtml}</select>
+            <input type="text" class="truck-note-input" placeholder="หมายเหตุ เช่น ชื่อหน้างาน" value="${escapeHtml(r.note)}"
+              style="width:120px;border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px;box-sizing:border-box;">
+          </div>
         `;
         const select = row.querySelector('select');
-        select.addEventListener('change', () => saveTruckStatus(r.label, select.value));
+        const noteInput = row.querySelector('.truck-note-input');
+        select.addEventListener('change', () => saveTruckStatus(r.label, select.value, noteInput.value.trim()));
+        noteInput.addEventListener('blur', () => saveTruckStatus(r.label, select.value, noteInput.value.trim()));
         card.appendChild(row);
       });
 
@@ -1453,6 +1489,7 @@
 
     const sendBtn = document.createElement('button');
     sendBtn.type = 'button';
+    sendBtn.id = 'summary-send-btn';
     sendBtn.className = 'btn-small edit-btn';
     sendBtn.style.cssText = 'width:100%;margin-top:12px;';
     sendBtn.textContent = '📤 ส่งสรุปนี้เข้ากลุ่มคนขับ';
@@ -1472,7 +1509,7 @@
     summary.remaining.forEach(r => {
       const key = r.status || 'ยังไม่ระบุสถานะ';
       if (!byStatus[key]) byStatus[key] = [];
-      byStatus[key].push(r.label);
+      byStatus[key].push(r.label + (r.note ? ` (${r.note})` : ''));
     });
     const icons = { 'หยุด': '⏸', 'จอด': '🅿️', 'ซ่อม': '🔧', 'เข้าแพล้นท์/เช็คซ่อม': '🏭', 'ยังไม่ระบุสถานะ': '❔' };
     Object.keys(byStatus).forEach(key => {
@@ -1483,45 +1520,55 @@
     return lines.join('\n').trim();
   }
 
-  async function saveTruckStatus(truckLabel, status) {
-    try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'setTruckStatus',
-          lineUserId: lineProfile ? lineProfile.userId : '',
-          date: currentSummaryDate,
-          truckLabel: truckLabel,
-          status: status
-        })
-      });
-      const result = await res.json();
-      if (result.status !== 'ok') throw new Error(result.message);
-      loadDailySummary();
-    } catch (err) {
-      alert('บันทึกสถานะไม่สำเร็จ: ' + err.message);
-    }
+  function saveTruckStatus(truckLabel, status, note) {
+    runOnce('truckStatus:' + currentSummaryDate + ':' + truckLabel, async () => {
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'setTruckStatus',
+            lineUserId: lineProfile ? lineProfile.userId : '',
+            date: currentSummaryDate,
+            truckLabel: truckLabel,
+            status: status,
+            note: note || ''
+          })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        loadDailySummary();
+      } catch (err) {
+        alert('บันทึกสถานะไม่สำเร็จ: ' + err.message);
+      }
+    });
   }
 
-  async function sendDailySummary() {
+  function sendDailySummary() {
     if (!confirm('ยืนยันส่งสรุปคิวรถวันนี้เข้ากลุ่มคนขับ?')) return;
-    try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'sendDailySummary',
-          lineUserId: lineProfile ? lineProfile.userId : '',
-          date: currentSummaryDate
-        })
-      });
-      const result = await res.json();
-      if (result.status !== 'ok') throw new Error(result.message);
-      alert('ส่งสรุปเข้ากลุ่มคนขับเรียบร้อย');
-    } catch (err) {
-      alert('ส่งไม่สำเร็จ: ' + err.message);
-    }
+    const sendBtn = document.getElementById('summary-send-btn');
+    runOnce('sendSummary:' + currentSummaryDate, async () => {
+      const originalText = sendBtn ? sendBtn.textContent : '';
+      if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'กำลังส่ง...'; }
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'sendDailySummary',
+            lineUserId: lineProfile ? lineProfile.userId : '',
+            date: currentSummaryDate
+          })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        alert('ส่งสรุปเข้ากลุ่มคนขับเรียบร้อย');
+      } catch (err) {
+        alert('ส่งไม่สำเร็จ: ' + err.message);
+      } finally {
+        if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = originalText; }
+      }
+    });
   }
 
   document.getElementById('summary-load-btn').addEventListener('click', loadDailySummary);
