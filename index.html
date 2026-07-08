@@ -1413,6 +1413,7 @@
   }
 
   let currentSummaryDate = null;
+  let currentSummaryData = null; // เก็บผลลัพธ์ล่าสุดไว้แก้ในเครื่อง (optimistic update) กันหน้าจอรีเฟรชทั้งหน้าทุกครั้งที่ตั้งสถานะรถทีละคัน
 
   async function loadDailySummary() {
     const dateInput = document.getElementById('summary-date-input');
@@ -1425,6 +1426,7 @@
       const res = await fetch(APPS_SCRIPT_URL + '?action=dailySummary&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') + '&date=' + encodeURIComponent(date));
       const result = await res.json();
       if (result.status !== 'ok') throw new Error(result.message);
+      currentSummaryData = result;
       renderDailySummary(result);
     } catch (err) {
       container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + err.message + '</p>';
@@ -1474,8 +1476,8 @@
         `;
         const select = row.querySelector('select');
         const noteInput = row.querySelector('.truck-note-input');
-        select.addEventListener('change', () => saveTruckStatus(r.label, select.value, noteInput.value.trim()));
-        noteInput.addEventListener('blur', () => saveTruckStatus(r.label, select.value, noteInput.value.trim()));
+        select.addEventListener('change', () => commitTruckStatus(r, select, noteInput));
+        noteInput.addEventListener('blur', () => commitTruckStatus(r, select, noteInput));
         card.appendChild(row);
       });
 
@@ -1532,8 +1534,13 @@
     return lines.join('\n').trim();
   }
 
-  function saveTruckStatus(truckLabel, status, note) {
-    runOnce('truckStatus:' + currentSummaryDate + ':' + truckLabel, async () => {
+  // บันทึกสถานะรถ 1 คันไปเซิร์ฟเวอร์ แล้วอัปเดตแค่ข้อมูลในเครื่อง + กล่องพรีวิวข้อความ
+  // (ไม่เรียก loadDailySummary ใหม่ทั้งหน้า กันจอกระตุก/รีเฟรชรัวๆ ตอนตั้งสถานะรถหลายคันติดกัน)
+  function commitTruckStatus(driverRow, select, noteInput) {
+    const status = select.value;
+    const note = noteInput.value.trim();
+
+    runOnce('truckStatus:' + currentSummaryDate + ':' + driverRow.label, async () => {
       try {
         const res = await fetch(APPS_SCRIPT_URL, {
           method: 'POST',
@@ -1542,14 +1549,18 @@
             action: 'setTruckStatus',
             lineUserId: lineProfile ? lineProfile.userId : '',
             date: currentSummaryDate,
-            truckLabel: truckLabel,
+            truckLabel: driverRow.label,
             status: status,
-            note: note || ''
+            note: note
           })
         });
         const result = await res.json();
         if (result.status !== 'ok') throw new Error(result.message);
-        loadDailySummary();
+
+        driverRow.status = status;
+        driverRow.note = note;
+        const previewBox = document.getElementById('summary-preview-box');
+        if (previewBox && currentSummaryData) previewBox.textContent = buildSummaryPreviewText(currentSummaryData);
       } catch (err) {
         alert('บันทึกสถานะไม่สำเร็จ: ' + err.message);
       }
