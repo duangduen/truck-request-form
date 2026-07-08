@@ -1260,9 +1260,12 @@
       isEdit ? 'บันทึกการแก้ไข' : 'ยืนยันจัดคิว';
 
     if (isEdit) {
-      const knownLabels = new Set(driversData.map(d => d.label));
+      // เทียบด้วยทะเบียนรถ (ไม่ใช่ label ทั้งสตริง) เพราะงานที่จัดคิวไว้ก่อนเปลี่ยนรูปแบบ label (2026-07-19)
+      // อาจยังเก็บ "ชื่อ - ทะเบียน" แบบเก่าอยู่ - ถ้าเจอให้ใช้ label ปัจจุบัน (รูปแบบใหม่) แทน ไม่ใช่ข้อความเก่าที่ค้างอยู่
+      const knownByPlate = new Map(driversData.map(d => [extractPlate(d.label), d.label]));
       existingAssigned.split(',').map(s => s.trim()).filter(Boolean).forEach(token => {
-        if (knownLabels.has(token)) selectedDriverLabels.add(token);
+        const plate = extractPlate(token);
+        if (knownByPlate.has(plate)) selectedDriverLabels.add(knownByPlate.get(plate));
         else assignCustomEntries.push(token);
       });
     }
@@ -1296,6 +1299,14 @@
     }
   }
 
+  // ดึงเลขทะเบียนรถ (รูปแบบ "XX-XXXX") ออกจากข้อความ ใช้เทียบรถให้ตรงกันไม่ว่า label จะเก็บรูปแบบไหน
+  // (เปลี่ยนจาก "ชื่อ - ทะเบียน" เป็น "ทะเบียน (ชื่อ)" เมื่อ 2026-07-19 - งานเก่าที่จัดคิวไว้ก่อนหน้านั้นยังเก็บรูปแบบเดิมอยู่)
+  function extractPlate(str) {
+    if (!str) return '';
+    const m = String(str).match(/\d{2}-\d{4}/);
+    return m ? m[0] : String(str).trim();
+  }
+
   // เช็คว่ารถคันนี้มีข้อจำกัด "ห้ามวิ่ง" ที่ตรงกับวัสดุของคำขอปัจจุบันไหม (จับคู่แบบ substring ไม่สนตัวพิมพ์เล็ก/ใหญ่)
   function driverConflictsWithMaterial(driver, material) {
     if (!material || !driver.exclude || driver.exclude.length === 0) return false;
@@ -1323,8 +1334,8 @@
 
     filtered.forEach(driver => {
       const risky = driverConflictsWithMaterial(driver, currentAssignMaterial);
-      // รถคันนี้ถูกจัดคิวไปหน้างานอื่นไว้แล้วในวันเดียวกันหรือไม่ (จาก currentAssignConflicts ที่โหลดตอนเปิด modal)
-      const conflictSites = currentAssignConflicts[driver.label] || [];
+      // รถคันนี้ถูกจัดคิวไปหน้างานอื่นไว้แล้วในวันเดียวกันหรือไม่ (จาก currentAssignConflicts ที่โหลดตอนเปิด modal - key เป็นทะเบียนรถ)
+      const conflictSites = currentAssignConflicts[extractPlate(driver.label)] || [];
       const doubleBooked = conflictSites.length > 0;
       const row = document.createElement('label');
       row.className = 'assign-check-row' + (risky || doubleBooked ? ' risky' : '');
