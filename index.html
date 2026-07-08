@@ -673,6 +673,8 @@
     }
   }
   let currentAssignMaterial = ''; // วัสดุของคำขอที่กำลังจัดคิวอยู่ ใช้เช็คว่ารถคันที่เลือกวิ่งวัสดุนี้ได้ไหม
+  let currentAssignDate = ''; // วันเริ่มงานของคำขอที่กำลังจัดคิวอยู่ ใช้เช็คว่ารถคันไหนถูกจัดไปหน้างานอื่นแล้วในวันเดียวกัน
+  let currentAssignConflicts = {}; // { "ทะเบียนรถ": ["หน้างานอื่นที่ถูกจัดไปแล้ว", ...] } โหลดจาก getTruckAssignmentsForDate
 
   // ---------- LIFF init ----------
   async function initLiff() {
@@ -1211,7 +1213,7 @@
         <button class="btn-small cancel-btn dispatch-cancel-btn">ยกเลิกคำขอนี้</button>
       </div>
     `;
-    card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material));
+    card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material, null, r.startDate, r.site));
     card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
     return card;
   }
@@ -1233,17 +1235,19 @@
         <button class="btn-small cancel-btn dispatch-cancel-btn">ยกเลิกคำขอนี้</button>
       </div>
     `;
-    card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material, r.assigned));
+    card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material, r.assigned, r.startDate, r.site));
     card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
     return card;
   }
 
   // existingAssigned: ถ้ามีค่า แปลว่าเป็นการ "แก้ไขการจัดคิว" ของงานที่จัดไปแล้ว - เอามาติ๊กพรีฟิลให้เลย
-  function openAssignModal(requestId, truckCount, material, existingAssigned) {
+  function openAssignModal(requestId, truckCount, material, existingAssigned, startDate, site) {
     assigningRequestId = requestId;
     selectedDriverLabels = new Set();
     assignCustomEntries = [];
     currentAssignMaterial = material || '';
+    currentAssignDate = startDate || '';
+    currentAssignConflicts = {};
     document.getElementById('assign-filter-input').value = '';
     document.getElementById('assign-custom-input').value = '';
     document.getElementById('assign-truck-hint').textContent =
@@ -1267,6 +1271,29 @@
     renderAssignCustomList();
     updateAssignSelectedCount();
     document.getElementById('assign-modal-overlay').classList.add('active');
+
+    // โหลดรายชื่อรถที่ถูกจัดคิวไปหน้างานอื่นแล้วในวันเดียวกัน (เพื่อเตือนตอนติ๊กเลือกซ้ำ) - ไม่บล็อกการเปิด modal ระหว่างรอโหลด
+    loadAssignConflicts(requestId, startDate, site);
+  }
+
+  // โหลด "รถคันไหนถูกจัดไปหน้างานอื่นแล้ววันนี้บ้าง" มาแสดงเป็นคำเตือนในลิสต์ติ๊กเลือก
+  // ไม่ critical เท่าการจัดคิวเอง เลยไม่ใช้ runOnce/ปิดปุ่ม - ปล่อยให้โหลดเงียบๆ แล้ว re-render ลิสต์เมื่อได้ข้อมูล
+  async function loadAssignConflicts(requestId, startDate, site) {
+    if (!startDate) return;
+    try {
+      const res = await fetchWithTimeout(
+        `${APPS_SCRIPT_URL}?action=truckAssignmentsForDate&userId=${encodeURIComponent(lineProfile ? lineProfile.userId : '')}&date=${encodeURIComponent(startDate)}&excludeRequestId=${encodeURIComponent(requestId || '')}`
+      );
+      const data = await res.json();
+      if (data.status !== 'ok') return;
+      // ถ้าผู้ใช้ปิด/เปลี่ยน modal ไปแล้วก่อนโหลดเสร็จ ไม่ต้อง apply ทับของคำขออื่น
+      if (assigningRequestId !== requestId) return;
+      currentAssignConflicts = data.assignments || {};
+      renderAssignCheckboxList(document.getElementById('assign-filter-input').value);
+    } catch (err) {
+      // เงียบไว้พอ - เป็นแค่ตัวเตือนเสริม ไม่ใช่ข้อมูลที่ critical ต่อการจัดคิว
+      console.error('loadAssignConflicts failed:', err);
+    }
   }
 
   // เช็คว่ารถคันนี้มีข้อจำกัด "ห้ามวิ่ง" ที่ตรงกับวัสดุของคำขอปัจจุบันไหม (จับคู่แบบ substring ไม่สนตัวพิมพ์เล็ก/ใหญ่)
@@ -1296,22 +1323,27 @@
 
     filtered.forEach(driver => {
       const risky = driverConflictsWithMaterial(driver, currentAssignMaterial);
+      // รถคันนี้ถูกจัดคิวไปหน้างานอื่นไว้แล้วในวันเดียวกันหรือไม่ (จาก currentAssignConflicts ที่โหลดตอนเปิด modal)
+      const conflictSites = currentAssignConflicts[driver.label] || [];
+      const doubleBooked = conflictSites.length > 0;
       const row = document.createElement('label');
-      row.className = 'assign-check-row' + (risky ? ' risky' : '');
+      row.className = 'assign-check-row' + (risky || doubleBooked ? ' risky' : '');
       row.innerHTML = `
         <input type="checkbox" ${selectedDriverLabels.has(driver.label) ? 'checked' : ''}>
         <div>
           <div>${escapeHtml(driver.label)}</div>
           ${driver.note ? `<div class="assign-check-note">${escapeHtml(driver.note)}</div>` : ''}
           ${risky ? `<div class="assign-check-warn">⚠️ ปกติไม่วิ่งวัสดุนี้ (${escapeHtml(driver.exclude.join(', '))})</div>` : ''}
+          ${doubleBooked ? `<div class="assign-check-warn">⚠️ ถูกจัดคิวไปหน้างาน "${escapeHtml(conflictSites.join(', '))}" แล้ว (วันเดียวกัน)</div>` : ''}
         </div>
       `;
       const checkbox = row.querySelector('input');
       checkbox.addEventListener('change', () => {
-        if (checkbox.checked && risky) {
-          const ok = confirm(
-            `⚠️ ${driver.label} ปกติไม่วิ่ง "${currentAssignMaterial}"\nข้อจำกัด: ${driver.exclude.join(', ')}\n\nยืนยันจะเลือกคันนี้อยู่ดีไหม?`
-          );
+        if (checkbox.checked && (risky || doubleBooked)) {
+          const warnLines = [];
+          if (doubleBooked) warnLines.push(`ถูกจัดคิวไปหน้างาน "${conflictSites.join(', ')}" แล้วในวันเดียวกัน (ถ้าตั้งใจไปหลายหน้างานในวันนี้ เช่น เช้า/บ่ายคนละที่ กด OK ได้เลย)`);
+          if (risky) warnLines.push(`ปกติไม่วิ่ง "${currentAssignMaterial}" — ข้อจำกัด: ${driver.exclude.join(', ')}`);
+          const ok = confirm(`⚠️ ${driver.label}\n\n${warnLines.join('\n\n')}\n\nยืนยันจะเลือกคันนี้อยู่ดีไหม?`);
           if (!ok) { checkbox.checked = false; return; }
         }
         if (checkbox.checked) selectedDriverLabels.add(driver.label);
