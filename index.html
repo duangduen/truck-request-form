@@ -64,6 +64,55 @@
     border-bottom-color: var(--primary);
   }
 
+  .subnav { display: flex; gap: 8px; margin-bottom: 12px; }
+  .subnav-btn {
+    flex: 1;
+    border: 1px solid var(--border);
+    background: var(--card);
+    padding: 9px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .subnav-btn.active { color: #fff; background: var(--primary); border-color: var(--primary); }
+
+  .summary-group-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+  .summary-group-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+  .truck-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .truck-status-row:last-child { border-bottom: none; }
+  .truck-status-row select {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 13px;
+    background: var(--card);
+  }
+  #summary-preview-box {
+    white-space: pre-wrap;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    font-size: 13px;
+    margin-top: 12px;
+    line-height: 1.6;
+  }
+
   #profile-bar {
     display: flex;
     flex-direction: column;
@@ -490,8 +539,23 @@
 
 <!-- ============ แท็บ 3: จัดคิว (เฉพาะฝ่ายจัดคิว - ซ่อนไว้จนกว่าจะเช็คสิทธิ์ผ่าน) ============ -->
 <div id="dispatch-view" class="view">
-  <button id="dispatch-refresh-btn">รีเฟรช</button>
-  <div id="dispatch-list"><p class="hint">กำลังโหลด...</p></div>
+  <div class="subnav">
+    <button type="button" id="dispatch-subnav-requests" class="subnav-btn active">รายการคำขอ</button>
+    <button type="button" id="dispatch-subnav-summary" class="subnav-btn">สรุปส่งกลุ่มคนขับ</button>
+  </div>
+
+  <div id="dispatch-requests-panel">
+    <button id="dispatch-refresh-btn">รีเฟรช</button>
+    <div id="dispatch-list"><p class="hint">กำลังโหลด...</p></div>
+  </div>
+
+  <div id="dispatch-summary-panel" style="display:none;">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+      <input type="date" id="summary-date-input" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:9px;font-size:15px;box-sizing:border-box;">
+      <button type="button" id="summary-load-btn" class="btn-small" style="flex:0 0 auto;padding:0 16px;">โหลด</button>
+    </div>
+    <div id="summary-content"><p class="hint">เลือกวันที่แล้วกด "โหลด"</p></div>
+  </div>
 </div>
 
 <!-- ============ กล่องเลือกคนขับตอนจัดคิว (ติ๊กเลือกได้หลายคันพร้อมกัน) ============ -->
@@ -1292,6 +1356,175 @@
   }
 
   document.getElementById('dispatch-refresh-btn').addEventListener('click', loadPendingRequests);
+
+  // ---------- แท็บย่อย "สรุปส่งกลุ่มคนขับ" (ครบทุกคัน: งานจากคำขอ + รถที่เหลือตั้งสถานะเอง แล้วกดส่งเข้ากลุ่มคนขับเอง) ----------
+  document.getElementById('dispatch-subnav-requests').addEventListener('click', () => {
+    document.getElementById('dispatch-subnav-requests').classList.add('active');
+    document.getElementById('dispatch-subnav-summary').classList.remove('active');
+    document.getElementById('dispatch-requests-panel').style.display = '';
+    document.getElementById('dispatch-summary-panel').style.display = 'none';
+  });
+
+  document.getElementById('dispatch-subnav-summary').addEventListener('click', () => {
+    document.getElementById('dispatch-subnav-summary').classList.add('active');
+    document.getElementById('dispatch-subnav-requests').classList.remove('active');
+    document.getElementById('dispatch-summary-panel').style.display = '';
+    document.getElementById('dispatch-requests-panel').style.display = 'none';
+    if (!document.getElementById('summary-date-input').value) {
+      document.getElementById('summary-date-input').value = todayDateStr();
+      loadDailySummary();
+    }
+  });
+
+  function todayDateStr() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  let currentSummaryDate = null;
+
+  async function loadDailySummary() {
+    const dateInput = document.getElementById('summary-date-input');
+    const date = dateInput.value || todayDateStr();
+    currentSummaryDate = date;
+    const container = document.getElementById('summary-content');
+    container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
+
+    try {
+      const res = await fetch(APPS_SCRIPT_URL + '?action=dailySummary&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') + '&date=' + encodeURIComponent(date));
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+      renderDailySummary(result);
+    } catch (err) {
+      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + err.message + '</p>';
+    }
+  }
+
+  function renderDailySummary(summary) {
+    const container = document.getElementById('summary-content');
+    container.innerHTML = '';
+
+    if (summary.siteGroups.length === 0 && summary.remaining.length === 0) {
+      container.innerHTML = '<p class="hint">ไม่พบข้อมูลรถของวันนี้</p>';
+      return;
+    }
+
+    summary.siteGroups.forEach(g => {
+      const card = document.createElement('div');
+      card.className = 'summary-group-card';
+      card.innerHTML = `
+        <div class="summary-group-title">🚧 ${escapeHtml(g.site)}</div>
+        <div>${escapeHtml(g.trucks.join(', '))}</div>
+      `;
+      container.appendChild(card);
+    });
+
+    if (summary.remaining.length > 0) {
+      const card = document.createElement('div');
+      card.className = 'summary-group-card';
+      const title = document.createElement('div');
+      title.className = 'summary-group-title';
+      title.textContent = `รถที่เหลือ (${summary.remaining.length} คัน) — ตั้งสถานะให้ครบก่อนส่ง`;
+      card.appendChild(title);
+
+      summary.remaining.forEach(r => {
+        const row = document.createElement('div');
+        row.className = 'truck-status-row';
+        const optionsHtml = ['<option value="">— เลือกสถานะ —</option>']
+          .concat(summary.statusOptions.map(opt => `<option value="${escapeHtml(opt)}" ${r.status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`))
+          .join('');
+        row.innerHTML = `
+          <div>${escapeHtml(r.label)}</div>
+          <select>${optionsHtml}</select>
+        `;
+        const select = row.querySelector('select');
+        select.addEventListener('change', () => saveTruckStatus(r.label, select.value));
+        card.appendChild(row);
+      });
+
+      container.appendChild(card);
+    }
+
+    const previewBox = document.createElement('div');
+    previewBox.id = 'summary-preview-box';
+    previewBox.textContent = buildSummaryPreviewText(summary);
+    container.appendChild(previewBox);
+
+    const sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.className = 'btn-small edit-btn';
+    sendBtn.style.cssText = 'width:100%;margin-top:12px;';
+    sendBtn.textContent = '📤 ส่งสรุปนี้เข้ากลุ่มคนขับ';
+    sendBtn.addEventListener('click', sendDailySummary);
+    container.appendChild(sendBtn);
+  }
+
+  // พรีวิวข้อความฝั่งแอป (รูปแบบเดียวกับที่ฝั่งเซิร์ฟเวอร์จะสร้างจริงตอนกดส่ง)
+  function buildSummaryPreviewText(summary) {
+    const lines = [`📋 สรุปคิวรถ วันที่ ${summary.date}`, ''];
+    summary.siteGroups.forEach(g => {
+      lines.push(`🚧 ${g.site}`);
+      lines.push(g.trucks.join(', '));
+      lines.push('');
+    });
+    const byStatus = {};
+    summary.remaining.forEach(r => {
+      const key = r.status || 'ยังไม่ระบุสถานะ';
+      if (!byStatus[key]) byStatus[key] = [];
+      byStatus[key].push(r.label);
+    });
+    const icons = { 'หยุด': '⏸', 'จอด': '🅿️', 'ซ่อม': '🔧', 'เข้าแพล้นท์/เช็คซ่อม': '🏭', 'ยังไม่ระบุสถานะ': '❔' };
+    Object.keys(byStatus).forEach(key => {
+      lines.push(`${icons[key] || '•'} ${key}`);
+      lines.push(byStatus[key].join(', '));
+      lines.push('');
+    });
+    return lines.join('\n').trim();
+  }
+
+  async function saveTruckStatus(truckLabel, status) {
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'setTruckStatus',
+          lineUserId: lineProfile ? lineProfile.userId : '',
+          date: currentSummaryDate,
+          truckLabel: truckLabel,
+          status: status
+        })
+      });
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+      loadDailySummary();
+    } catch (err) {
+      alert('บันทึกสถานะไม่สำเร็จ: ' + err.message);
+    }
+  }
+
+  async function sendDailySummary() {
+    if (!confirm('ยืนยันส่งสรุปคิวรถวันนี้เข้ากลุ่มคนขับ?')) return;
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'sendDailySummary',
+          lineUserId: lineProfile ? lineProfile.userId : '',
+          date: currentSummaryDate
+        })
+      });
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+      alert('ส่งสรุปเข้ากลุ่มคนขับเรียบร้อย');
+    } catch (err) {
+      alert('ส่งไม่สำเร็จ: ' + err.message);
+    }
+  }
+
+  document.getElementById('summary-load-btn').addEventListener('click', loadDailySummary);
 
   // ---------- tab switching ----------
   document.querySelectorAll('.tab-btn').forEach(btn => {
