@@ -639,6 +639,27 @@
   let selectedDriverLabels = new Set(); // คันที่ติ๊กเลือกไว้แล้วในกล่องจัดคิวปัจจุบัน (จากลิสต์ที่มีอยู่)
   let assignCustomEntries = []; // คนขับ/รถที่พิมพ์เพิ่มเอง (ไม่มีในลิสต์)
 
+  // กันหน้าจอค้างตลอดกาล (เช่น "กำลังส่ง...") ถ้าเน็ตมือถือ/เว็บวิวไลน์ค้างระหว่างรอผลลัพธ์ - fetch เฉยๆ ไม่มี timeout ในตัว
+  // ถ้าเซิร์ฟเวอร์ทำสำเร็จแล้ว (เช่นแจ้งไลน์ไปแล้ว) แต่ browser ไม่ได้รับ response กลับมา ปุ่มจะค้างอยู่แบบนั้นตลอดไปโดยไม่มี error ให้เห็นเลย
+  async function fetchWithTimeout(url, options) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000); // 20 วิ
+    try {
+      return await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // ข้อความ error ที่อ่านง่ายขึ้นเวลาเจอ timeout - ต้องเตือนให้เช็คก่อนลองใหม่ เพราะเซิร์ฟเวอร์อาจทำสำเร็จไปแล้วจริงๆ
+  // (ไม่ใช่แค่บอกว่า "พัง" เฉยๆ เดี๋ยวคนกดซ้ำแล้วได้คำขอซ้ำสอง)
+  function friendlyErrorMessage(err) {
+    if (err && err.name === 'AbortError') {
+      return 'การเชื่อมต่อช้าเกินไป (รอเกิน 20 วิ) ระบบอาจบันทึกไปแล้วหรือยังก็ได้ กรุณาเช็คในแท็บ "คำขอของฉัน" ก่อนลองใหม่ อย่ากดซ้ำทันที';
+    }
+    return err && err.message ? err.message : String(err);
+  }
+
   // กันกดปุ่มซ้ำ/ดับเบิ้ลระหว่างรอผลลัพธ์จากเซิร์ฟเวอร์ (เช่นตอนเน็ตช้า LockService รอคิวจากคำขออื่น)
   // ใช้ key เดียวกันสำหรับปุ่มเดียวกัน ถ้ายังมีคำขอเดิมค้างอยู่ในคิว จะไม่ยิงซ้ำซ้อนออกไปอีก
   const inFlightActions = new Set();
@@ -681,7 +702,7 @@
   async function checkDispatcherAndSetup() {
     if (!lineProfile) return;
     try {
-      const res = await fetch(APPS_SCRIPT_URL + '?action=checkDispatcher&userId=' + encodeURIComponent(lineProfile.userId));
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=checkDispatcher&userId=' + encodeURIComponent(lineProfile.userId));
       const result = await res.json();
       if (result.status === 'ok' && result.isDispatcher) {
         document.getElementById('dispatch-tab-btn').style.display = '';
@@ -694,7 +715,7 @@
 
   async function loadDrivers() {
     try {
-      const res = await fetch(APPS_SCRIPT_URL + '?action=drivers');
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=drivers');
       const result = await res.json();
       if (result.status === 'ok') driversData = result.drivers;
     } catch (err) {
@@ -705,7 +726,7 @@
   // ---------- โหลด dropdown จากชีต ----------
   async function loadOptions() {
     try {
-      const res = await fetch(APPS_SCRIPT_URL + '?action=options');
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=options');
       const result = await res.json();
       if (result.status === 'ok') optionsData = result.options;
     } catch (err) {
@@ -806,7 +827,7 @@
     };
 
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
@@ -820,7 +841,7 @@
       setTimeout(() => { if (liff.isInClient && liff.isInClient()) liff.closeWindow(); }, 1800);
 
     } catch (err) {
-      statusMsg.textContent = 'บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง (' + err.message + ')';
+      statusMsg.textContent = 'บันทึกไม่สำเร็จ: ' + friendlyErrorMessage(err);
       statusMsg.className = 'error'; statusMsg.style.display = 'block';
     } finally {
       btn.disabled = false;
@@ -858,29 +879,15 @@
     document.getElementById('form-title-hint').style.display = 'block';
   }
 
-  function doMarkProgressDone(requestId) {
-    if (!confirm('ยืนยันว่าส่งงานนี้ครบแล้ว? รายการนี้จะไม่โผล่ในสรุปคิวรถของฝ่ายจัดคิวอีกตั้งแต่วันถัดไป')) return;
-    runOnce('markDone:' + requestId, async () => {
-      try {
-        const res = await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'markProgressDone', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
-        });
-        const result = await res.json();
-        if (result.status !== 'ok') throw new Error(result.message);
-        loadMyRequests();
-      } catch (err) {
-        alert('แจ้งไม่สำเร็จ: ' + err.message);
-      }
-    });
-  }
+  // หมายเหตุ: เดิมมีปุ่ม "แจ้งส่งงานครบแล้ว" แยกต่างหากให้กดเอง - เอาออกแล้ว (2026-07-17)
+  // เพราะกด "เสร็จแล้ว" (สถานะหน้างาน) จุดเดียวก็ปิดงานให้แล้วอัตโนมัติอยู่แล้ว (ดู updateSiteStatus ใน Code.gs)
+  // ไม่บังคับให้ช่างต้องกด 2 รอบ ป้องกันลืมกดปุ่มที่สอง
 
   function doCancel(requestId) {
     if (!confirm('ยืนยันยกเลิกคำขอนี้?')) return;
     runOnce('cancel:' + requestId, async () => {
       try {
-        const res = await fetch(APPS_SCRIPT_URL, {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'cancel', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
@@ -889,7 +896,7 @@
         if (result.status !== 'ok') throw new Error(result.message);
         loadMyRequests();
       } catch (err) {
-        alert('ยกเลิกไม่สำเร็จ: ' + err.message);
+        alert('ยกเลิกไม่สำเร็จ: ' + friendlyErrorMessage(err));
       }
     });
   }
@@ -1046,7 +1053,7 @@
     if (note === null) return; // กดยกเลิก
     runOnce('siteStatus:' + requestId, async () => {
       try {
-        const res = await fetch(APPS_SCRIPT_URL, {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
@@ -1061,7 +1068,7 @@
         if (result.status !== 'ok') throw new Error(result.message);
         loadMyRequests();
       } catch (err) {
-        alert('อัปเดตไม่สำเร็จ: ' + err.message);
+        alert('อัปเดตไม่สำเร็จ: ' + friendlyErrorMessage(err));
       }
     });
   }
@@ -1083,7 +1090,7 @@
       return;
     }
     try {
-      const res = await fetch(APPS_SCRIPT_URL + '?action=myRequests&userId=' + encodeURIComponent(lineProfile.userId));
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=myRequests&userId=' + encodeURIComponent(lineProfile.userId));
       const result = await res.json();
       if (result.status !== 'ok') throw new Error(result.message);
 
@@ -1096,7 +1103,6 @@
       result.requests.forEach(r => {
         const canEdit = r.status === 'รอจัดคิว';
         const canUpdateSite = r.status.indexOf('ยกเลิก') === -1;
-        const canMarkDone = r.status === 'จัดคิวแล้ว' && r.progressStatus === 'กำลังส่ง';
         const card = document.createElement('div');
         card.className = 'request-card';
         card.innerHTML = `
@@ -1113,9 +1119,6 @@
           ${canEdit ? `<div class="card-actions">
               <button class="btn-small edit-btn">แก้ไข</button>
               <button class="btn-small cancel-btn">ยกเลิก</button>
-            </div>` : ''}
-          ${canMarkDone ? `<div class="card-actions">
-              <button class="btn-small edit-btn mark-done-btn">✅ แจ้งส่งงานครบแล้ว</button>
             </div>` : ''}
           ${canUpdateSite ? `
             <div class="site-status-section">
@@ -1135,9 +1138,6 @@
           card.querySelector('.edit-btn').addEventListener('click', () => startEdit(r));
           card.querySelector('.cancel-btn').addEventListener('click', () => doCancel(r.requestId));
         }
-        if (canMarkDone) {
-          card.querySelector('.mark-done-btn').addEventListener('click', () => doMarkProgressDone(r.requestId));
-        }
         if (canUpdateSite) {
           card.querySelectorAll('.btn-tiny').forEach(btn => {
             btn.addEventListener('click', () => doUpdateSiteStatus(r.requestId, btn.dataset.status));
@@ -1146,7 +1146,7 @@
         container.appendChild(card);
       });
     } catch (err) {
-      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + err.message + '</p>';
+      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + friendlyErrorMessage(err) + '</p>';
     }
   }
 
@@ -1159,7 +1159,7 @@
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
 
     try {
-      const res = await fetch(APPS_SCRIPT_URL + '?action=pendingRequests&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''));
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=pendingRequests&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''));
       const result = await res.json();
       if (result.status !== 'ok') throw new Error(result.message);
 
@@ -1189,7 +1189,7 @@
         queued.forEach(r => container.appendChild(buildQueuedCard(r)));
       }
     } catch (err) {
-      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + err.message + '</p>';
+      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + friendlyErrorMessage(err) + '</p>';
     }
   }
 
@@ -1377,7 +1377,7 @@
       confirmBtn.disabled = true;
       confirmLabel.textContent = 'กำลังบันทึก...';
       try {
-        const res = await fetch(APPS_SCRIPT_URL, {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
@@ -1393,7 +1393,7 @@
         assigningRequestId = null;
         loadPendingRequests();
       } catch (err) {
-        alert('จัดคิวไม่สำเร็จ: ' + err.message);
+        alert('จัดคิวไม่สำเร็จ: ' + friendlyErrorMessage(err));
       } finally {
         confirmBtn.disabled = false;
         confirmLabel.textContent = originalLabel;
@@ -1405,7 +1405,7 @@
     if (!confirm('ยืนยันยกเลิกคำขอนี้? ระบบจะแจ้งช่างที่ขอไว้ทันที')) return;
     runOnce('dispatchCancel:' + requestId, async () => {
       try {
-        const res = await fetch(APPS_SCRIPT_URL, {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ action: 'cancelFromApp', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
@@ -1414,7 +1414,7 @@
         if (result.status !== 'ok') throw new Error(result.message);
         loadPendingRequests();
       } catch (err) {
-        alert('ยกเลิกไม่สำเร็จ: ' + err.message);
+        alert('ยกเลิกไม่สำเร็จ: ' + friendlyErrorMessage(err));
       }
     });
   }
@@ -1457,13 +1457,13 @@
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
 
     try {
-      const res = await fetch(APPS_SCRIPT_URL + '?action=dailySummary&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') + '&date=' + encodeURIComponent(date));
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=dailySummary&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') + '&date=' + encodeURIComponent(date));
       const result = await res.json();
       if (result.status !== 'ok') throw new Error(result.message);
       currentSummaryData = result;
       renderDailySummary(result);
     } catch (err) {
-      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + err.message + '</p>';
+      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + friendlyErrorMessage(err) + '</p>';
     }
   }
 
@@ -1595,7 +1595,7 @@
 
     runOnce('truckStatus:' + currentSummaryDate + ':' + driverRow.label, async () => {
       try {
-        const res = await fetch(APPS_SCRIPT_URL, {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
@@ -1615,7 +1615,7 @@
         const previewBox = document.getElementById('summary-preview-box');
         if (previewBox && currentSummaryData) previewBox.textContent = buildSummaryPreviewText(currentSummaryData);
       } catch (err) {
-        alert('บันทึกสถานะไม่สำเร็จ: ' + err.message);
+        alert('บันทึกสถานะไม่สำเร็จ: ' + friendlyErrorMessage(err));
       }
     });
   }
@@ -1627,7 +1627,7 @@
       const originalText = sendBtn ? sendBtn.textContent : '';
       if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'กำลังส่ง...'; }
       try {
-        const res = await fetch(APPS_SCRIPT_URL, {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
@@ -1640,7 +1640,7 @@
         if (result.status !== 'ok') throw new Error(result.message);
         alert('ส่งสรุปเข้ากลุ่มคนขับเรียบร้อย');
       } catch (err) {
-        alert('ส่งไม่สำเร็จ: ' + err.message);
+        alert('ส่งไม่สำเร็จ: ' + friendlyErrorMessage(err));
       } finally {
         if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = originalText; }
       }
