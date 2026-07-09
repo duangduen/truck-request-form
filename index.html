@@ -1652,8 +1652,8 @@
       const reconfirmNote = g.isContinuing
         ? `<div class="hint" style="color:#a1671b;margin-top:4px;">⚠️ งานต่อเนื่องจากวันก่อน — ทบทวนทีมงานวันนี้อีกครั้ง (คนขับหยุด/รถเสียหรือเปล่า) แก้ไขได้ที่แท็บ "รายการคำขอ" &gt; "จัดคิวแล้ว" &gt; "แก้ไขการจัดคิว"</div>`
         : '';
-      // comma คั่นบรรทัดเดียว ไม่ขึ้นเลขลำดับ/บรรทัดใหม่ (เหมือน formatTruckList_ ฝั่งเซิร์ฟเวอร์ - ให้ตรงกับข้อความจริงที่จะส่ง)
-      const truckListHtml = g.trucks.map(t => escapeHtml(t)).join(', ');
+      // comma คั่นบรรทัดเดียว โชว์แค่ทะเบียน ไม่โชว์ชื่อคนขับ (เหมือน buildDailySummaryText_ ฝั่งเซิร์ฟเวอร์ - ให้ตรงกับข้อความจริงที่จะส่ง)
+      const truckListHtml = g.trucks.map(t => escapeHtml(extractPlate(t))).join(', ');
       card.innerHTML = `
         <div class="summary-group-title">🚧 ${escapeHtml(g.site)} (${g.trucks.length} คัน)${dayLabel}</div>
         <div>${truckListHtml}</div>
@@ -1776,22 +1776,22 @@
     summary.siteGroups.forEach(g => {
       const dayLabel = g.dayInfo ? ` (${g.dayInfo.dayNumber}/${g.dayInfo.totalDays}, เหลือ ${g.dayInfo.remainingDays} วัน)` : '';
       lines.push(`🚧 ${g.site} (${g.trucks.length} คัน)${dayLabel}`);
-      lines.push(formatTruckList(g.trucks));
+      lines.push(formatTruckList(g.trucks.map(extractPlate))); // ในข้อความส่งกลุ่มคนขับ โชว์แค่ทะเบียน ไม่โชว์ชื่อคนขับ (2026-07-19)
       lines.push('');
     });
     const manualSiteGroups = {};
     const icons = { 'หยุด': '⏸', 'จอด': '🅿️', 'ซ่อม/เช็คซ่อม': '🔧', 'วิ่งหินทรายเข้าแพล้นท์': '🏭', 'ยังไม่ระบุสถานะ': '❔' };
     const otherStatusItems = [];
     summary.remaining.forEach(r => {
-      const displayLabel = r.displayLabel || r.label; // ใช้ชื่อคนขับที่แก้ไขเฉพาะวันนี้แทน ถ้ามีการแก้ไว้
+      const plateOnly = extractPlate(r.displayLabel || r.label); // ในข้อความส่งกลุ่มคนขับ โชว์แค่ทะเบียน ไม่โชว์ชื่อคนขับ (2026-07-19)
       if (r.status === 'ไปหน้างาน') {
         const site = r.note || 'ไปหน้างาน (ยังไม่ระบุชื่อหน้างานในหมายเหตุ)';
         if (!manualSiteGroups[site]) manualSiteGroups[site] = [];
-        manualSiteGroups[site].push(displayLabel);
+        manualSiteGroups[site].push(plateOnly);
       } else {
         const key = r.status || 'ยังไม่ระบุสถานะ';
         const icon = icons[key] || '•';
-        otherStatusItems.push(`${icon} ${displayLabel}${r.note ? ` (${r.note})` : ''}`);
+        otherStatusItems.push(`${icon} ${plateOnly}${r.note ? ` (${r.note})` : ''}`);
       }
     });
     Object.keys(manualSiteGroups).forEach(site => {
