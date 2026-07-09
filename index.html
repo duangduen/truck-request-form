@@ -88,20 +88,52 @@
   .summary-group-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
   .truck-status-row {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
     gap: 8px;
-    padding: 8px 0;
+    padding: 10px 0;
     border-bottom: 1px solid var(--border);
   }
   .truck-status-row:last-child { border-bottom: none; }
-  .truck-status-row select {
+  .truck-status-row-label { font-weight: 700; font-size: 14px; }
+  .truck-status-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .truck-status-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .truck-status-field-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.02em; }
+  .truck-note-field { grid-column: 1 / -1; }
+  .truck-status-row select,
+  .truck-note-input,
+  .searchable-select-input {
+    width: 100%;
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 6px 8px;
+    padding: 7px 8px;
     font-size: 13px;
     background: var(--card);
+    box-sizing: border-box;
+    color: var(--text);
   }
+
+  /* dropdown แบบพิมพ์ค้นหาได้ - ใช้แทน <select> ธรรมดาตรงจุดที่ตัวเลือกเยอะ (ชื่อคนขับ) */
+  .searchable-select { position: relative; }
+  .searchable-select-list {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-height: 190px;
+    overflow-y: auto;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+  }
+  .searchable-select-item { padding: 9px 10px; font-size: 13px; cursor: pointer; }
+  .searchable-select-item:hover, .searchable-select-item.active { background: var(--bg); }
+  .searchable-select-empty { padding: 9px 10px; font-size: 12px; color: var(--text-muted); }
   #summary-preview-box {
     white-space: pre-wrap;
     background: var(--card);
@@ -1509,6 +1541,72 @@
     }
   }
 
+  // สร้าง dropdown แบบพิมพ์ค้นหาได้ (ใช้แทน <select> ธรรมดา เพราะลิสต์คนขับมีเป็นสิบรายชื่อ เลื่อนหาเองไม่สะดวก)
+  // options: [{value, text}, ...] - คืนค่าเป็น element ที่มี .value (getter/setter) และยิง 'change' event ตอนเลือกใหม่
+  // เพื่อให้ใช้แทน native <select> ได้เลยโดยโค้ดฝั่งเรียกใช้ (commitTruckStatus) ไม่ต้องแก้อะไรเพิ่ม
+  function createSearchableSelect(options, currentValue, placeholder) {
+    const wrap = document.createElement('div');
+    wrap.className = 'searchable-select';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'searchable-select-input';
+    input.placeholder = placeholder || '';
+    input.autocomplete = 'off';
+
+    const list = document.createElement('div');
+    list.className = 'searchable-select-list';
+    list.style.display = 'none';
+
+    let _value = currentValue || '';
+    const findOpt = v => options.find(o => o.value === v);
+    const syncDisplay = () => { input.value = findOpt(_value) ? findOpt(_value).text : ''; };
+    syncDisplay();
+
+    Object.defineProperty(wrap, 'value', {
+      get() { return _value; },
+      set(v) { _value = v; syncDisplay(); }
+    });
+
+    function renderList(filterText) {
+      const q = (filterText || '').trim().toLowerCase();
+      const filtered = q ? options.filter(o => o.text.toLowerCase().includes(q)) : options;
+      list.innerHTML = '';
+      if (filtered.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'searchable-select-empty';
+        empty.textContent = 'ไม่พบรายการ';
+        list.appendChild(empty);
+        return;
+      }
+      filtered.forEach(o => {
+        const item = document.createElement('div');
+        item.className = 'searchable-select-item' + (o.value === _value ? ' active' : '');
+        item.textContent = o.text;
+        // ใช้ mousedown (ไม่ใช่ click) + preventDefault กัน input เสีย focus/blur ไปก่อนที่จะจับการเลือกได้ทัน
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          _value = o.value;
+          syncDisplay();
+          list.style.display = 'none';
+          wrap.dispatchEvent(new Event('change'));
+        });
+        list.appendChild(item);
+      });
+    }
+
+    input.addEventListener('focus', () => { renderList(''); list.style.display = 'block'; });
+    input.addEventListener('input', () => { renderList(input.value); list.style.display = 'block'; });
+    input.addEventListener('blur', () => {
+      // หน่วงให้ mousedown บนรายการทำงานก่อน list ถูกซ่อน แล้วค่อยรีเซ็ตข้อความในช่องกลับเป็นค่าที่เลือกจริง
+      setTimeout(() => { list.style.display = 'none'; syncDisplay(); }, 150);
+    });
+
+    wrap.appendChild(input);
+    wrap.appendChild(list);
+    return wrap;
+  }
+
   function renderDailySummary(summary) {
     const container = document.getElementById('summary-content');
     container.innerHTML = '';
@@ -1547,32 +1645,58 @@
         driversData.map(d => d.name).filter(n => n && n.indexOf('รถสำรอง') === -1)
       )].sort((a, b) => a.localeCompare(b, 'th'));
 
+      const statusOptionList = [{ value: '', text: '— เลือกสถานะ —' }]
+        .concat(summary.statusOptions.map(opt => ({ value: opt, text: opt })));
+      // "(ค่าเริ่มต้น)" = ใช้ชื่อเดิมจาก roster, "-" = วันนี้ไม่มีคนขับให้จริงๆ (เช่น คนขับลาแล้วไม่มีคนสลับ)
+      const driverOptionList = [{ value: '', text: '(ค่าเริ่มต้น)' }, { value: '-', text: '- (ไม่มีคนขับ)' }]
+        .concat(allDriverNames.map(n => ({ value: n, text: n })));
+
       summary.remaining.forEach(r => {
         const row = document.createElement('div');
         row.className = 'truck-status-row';
-        const optionsHtml = ['<option value="">— เลือกสถานะ —</option>']
-          .concat(summary.statusOptions.map(opt => `<option value="${escapeHtml(opt)}" ${r.status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`))
-          .join('');
-        // dropdown แก้ไขว่าวันนี้ใครขับรถคันนี้จริง (เช่น รถประจำเสีย เอาคนขับไปขับรถสำรองแทน) - ค่าว่าง = ใช้ชื่อเดิมจาก roster
-        const driverOptionsHtml = ['<option value="">(ค่าเริ่มต้น)</option>']
-          .concat(allDriverNames.map(n => `<option value="${escapeHtml(n)}" ${r.driverNameOverride === n ? 'selected' : ''}>${escapeHtml(n)}</option>`))
-          .join('');
-        row.innerHTML = `
-          <div>${escapeHtml(r.displayLabel || r.label)}</div>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-            <select>${optionsHtml}</select>
-            <input type="text" class="truck-note-input" placeholder="หมายเหตุ เช่น ชื่อหน้างาน" value="${escapeHtml(r.note)}"
-              style="width:120px;border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px;box-sizing:border-box;">
-            <select class="truck-driver-select" title="แก้ไขคนขับเฉพาะวันนี้ เช่น รถประจำเสีย เอาคนขับไปขับรถสำรองแทน">${driverOptionsHtml}</select>
-          </div>
-        `;
-        const select = row.querySelector('select');
-        const noteInput = row.querySelector('.truck-note-input');
-        const driverSelect = row.querySelector('.truck-driver-select');
-        const labelDiv = row.querySelector('div');
-        select.addEventListener('change', () => commitTruckStatus(r, select, noteInput, driverSelect, labelDiv));
-        noteInput.addEventListener('blur', () => commitTruckStatus(r, select, noteInput, driverSelect, labelDiv));
-        driverSelect.addEventListener('change', () => commitTruckStatus(r, select, noteInput, driverSelect, labelDiv));
+
+        const labelDiv = document.createElement('div');
+        labelDiv.className = 'truck-status-row-label';
+        labelDiv.textContent = r.displayLabel || r.label;
+        row.appendChild(labelDiv);
+
+        const fields = document.createElement('div');
+        fields.className = 'truck-status-fields';
+
+        const statusField = document.createElement('div');
+        statusField.className = 'truck-status-field';
+        const statusFieldLabel = document.createElement('div');
+        statusFieldLabel.className = 'truck-status-field-label';
+        statusFieldLabel.textContent = 'สถานะ';
+        const statusSelect = createSearchableSelect(statusOptionList, r.status, 'เลือกสถานะ');
+        statusField.append(statusFieldLabel, statusSelect);
+
+        const driverField = document.createElement('div');
+        driverField.className = 'truck-status-field';
+        const driverFieldLabel = document.createElement('div');
+        driverFieldLabel.className = 'truck-status-field-label';
+        driverFieldLabel.textContent = 'คนขับ';
+        const driverSelect = createSearchableSelect(driverOptionList, r.driverNameOverride || '', 'เลือกคนขับ');
+        driverField.append(driverFieldLabel, driverSelect);
+
+        const noteField = document.createElement('div');
+        noteField.className = 'truck-status-field truck-note-field';
+        const noteFieldLabel = document.createElement('div');
+        noteFieldLabel.className = 'truck-status-field-label';
+        noteFieldLabel.textContent = 'หมายเหตุ';
+        const noteInput = document.createElement('input');
+        noteInput.type = 'text';
+        noteInput.className = 'truck-note-input';
+        noteInput.placeholder = 'เช่น ชื่อหน้างาน';
+        noteInput.value = r.note || '';
+        noteField.append(noteFieldLabel, noteInput);
+
+        fields.append(statusField, driverField, noteField);
+        row.appendChild(fields);
+
+        statusSelect.addEventListener('change', () => commitTruckStatus(r, statusSelect, noteInput, driverSelect, labelDiv));
+        noteInput.addEventListener('blur', () => commitTruckStatus(r, statusSelect, noteInput, driverSelect, labelDiv));
+        driverSelect.addEventListener('change', () => commitTruckStatus(r, statusSelect, noteInput, driverSelect, labelDiv));
         card.appendChild(row);
       });
 
