@@ -427,7 +427,6 @@
 
 <header>
   <h1>ขอเบิกวัสดุ / ขอใช้รถ</h1>
-  <p>กรอกครั้งเดียว ข้อมูลเข้าระบบทันที ไม่ต้องถ่ายรูปส่งอีกต่อไป</p>
 </header>
 
 <div class="tabs">
@@ -1543,24 +1542,37 @@
       title.textContent = `รถที่เหลือ (${summary.remaining.length} คัน) — ตั้งสถานะให้ครบก่อนส่ง`;
       card.appendChild(title);
 
+      // ชื่อคนขับทั้งหมดจาก roster (ตัด "รถสำรอง" ที่ไม่ใช่ชื่อคนจริงออก) ใช้เป็นตัวเลือกใน dropdown แก้ไขคนขับประจำวัน
+      const allDriverNames = [...new Set(
+        driversData.map(d => d.name).filter(n => n && n.indexOf('รถสำรอง') === -1)
+      )].sort((a, b) => a.localeCompare(b, 'th'));
+
       summary.remaining.forEach(r => {
         const row = document.createElement('div');
         row.className = 'truck-status-row';
         const optionsHtml = ['<option value="">— เลือกสถานะ —</option>']
           .concat(summary.statusOptions.map(opt => `<option value="${escapeHtml(opt)}" ${r.status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`))
           .join('');
+        // dropdown แก้ไขว่าวันนี้ใครขับรถคันนี้จริง (เช่น รถประจำเสีย เอาคนขับไปขับรถสำรองแทน) - ค่าว่าง = ใช้ชื่อเดิมจาก roster
+        const driverOptionsHtml = ['<option value="">(ค่าเริ่มต้น)</option>']
+          .concat(allDriverNames.map(n => `<option value="${escapeHtml(n)}" ${r.driverNameOverride === n ? 'selected' : ''}>${escapeHtml(n)}</option>`))
+          .join('');
         row.innerHTML = `
-          <div>${escapeHtml(r.label)}</div>
-          <div style="display:flex;gap:6px;align-items:center;">
+          <div>${escapeHtml(r.displayLabel || r.label)}</div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
             <select>${optionsHtml}</select>
             <input type="text" class="truck-note-input" placeholder="หมายเหตุ เช่น ชื่อหน้างาน" value="${escapeHtml(r.note)}"
               style="width:120px;border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px;box-sizing:border-box;">
+            <select class="truck-driver-select" title="แก้ไขคนขับเฉพาะวันนี้ เช่น รถประจำเสีย เอาคนขับไปขับรถสำรองแทน">${driverOptionsHtml}</select>
           </div>
         `;
         const select = row.querySelector('select');
         const noteInput = row.querySelector('.truck-note-input');
-        select.addEventListener('change', () => commitTruckStatus(r, select, noteInput));
-        noteInput.addEventListener('blur', () => commitTruckStatus(r, select, noteInput));
+        const driverSelect = row.querySelector('.truck-driver-select');
+        const labelDiv = row.querySelector('div');
+        select.addEventListener('change', () => commitTruckStatus(r, select, noteInput, driverSelect, labelDiv));
+        noteInput.addEventListener('blur', () => commitTruckStatus(r, select, noteInput, driverSelect, labelDiv));
+        driverSelect.addEventListener('change', () => commitTruckStatus(r, select, noteInput, driverSelect, labelDiv));
         card.appendChild(row);
       });
 
@@ -1606,14 +1618,15 @@
     const manualSiteGroups = {};
     const byStatus = {};
     summary.remaining.forEach(r => {
+      const displayLabel = r.displayLabel || r.label; // ใช้ชื่อคนขับที่แก้ไขเฉพาะวันนี้แทน ถ้ามีการแก้ไว้
       if (r.status === 'ไปหน้างาน') {
         const site = r.note || 'ไปหน้างาน (ยังไม่ระบุชื่อหน้างานในหมายเหตุ)';
         if (!manualSiteGroups[site]) manualSiteGroups[site] = [];
-        manualSiteGroups[site].push(r.label);
+        manualSiteGroups[site].push(displayLabel);
       } else {
         const key = r.status || 'ยังไม่ระบุสถานะ';
         if (!byStatus[key]) byStatus[key] = [];
-        byStatus[key].push(r.label + (r.note ? ` (${r.note})` : ''));
+        byStatus[key].push(displayLabel + (r.note ? ` (${r.note})` : ''));
       }
     });
     Object.keys(manualSiteGroups).forEach(site => {
@@ -1621,7 +1634,7 @@
       lines.push(manualSiteGroups[site].join(', '));
       lines.push('');
     });
-    const icons = { 'หยุด': '⏸', 'จอด': '🅿️', 'ซ่อม': '🔧', 'เข้าแพล้นท์/เช็คซ่อม': '🏭', 'ยังไม่ระบุสถานะ': '❔' };
+    const icons = { 'หยุด': '⏸', 'จอด': '🅿️', 'ซ่อม/เช็คซ่อม': '🔧', 'วิ่งหินทรายเข้าแพล้นท์': '🏭', 'ยังไม่ระบุสถานะ': '❔' };
     Object.keys(byStatus).forEach(key => {
       lines.push(`${icons[key] || '•'} ${key}`);
       lines.push(byStatus[key].join(', '));
@@ -1632,29 +1645,38 @@
 
   // บันทึกสถานะรถ 1 คันไปเซิร์ฟเวอร์ แล้วอัปเดตแค่ข้อมูลในเครื่อง + กล่องพรีวิวข้อความ
   // (ไม่เรียก loadDailySummary ใหม่ทั้งหน้า กันจอกระตุก/รีเฟรชรัวๆ ตอนตั้งสถานะรถหลายคันติดกัน)
-  function commitTruckStatus(driverRow, select, noteInput) {
+  function commitTruckStatus(driverRow, select, noteInput, driverSelect, labelDiv) {
     const status = select.value;
     const note = noteInput.value.trim();
+    const driverName = driverSelect ? driverSelect.value : undefined; // undefined = ไม่ส่ง ไม่ไปแตะคอลัมน์ชื่อคนขับที่ backend
 
     runOnce('truckStatus:' + currentSummaryDate + ':' + driverRow.label, async () => {
       try {
+        const payload = {
+          action: 'setTruckStatus',
+          lineUserId: lineProfile ? lineProfile.userId : '',
+          date: currentSummaryDate,
+          truckLabel: driverRow.label,
+          status: status,
+          note: note
+        };
+        if (driverName !== undefined) payload.driverName = driverName;
+
         const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'setTruckStatus',
-            lineUserId: lineProfile ? lineProfile.userId : '',
-            date: currentSummaryDate,
-            truckLabel: driverRow.label,
-            status: status,
-            note: note
-          })
+          body: JSON.stringify(payload)
         });
         const result = await res.json();
         if (result.status !== 'ok') throw new Error(result.message);
 
         driverRow.status = status;
         driverRow.note = note;
+        if (driverName !== undefined) {
+          driverRow.driverNameOverride = driverName;
+          driverRow.displayLabel = driverName ? `${extractPlate(driverRow.label)} (${driverName})` : driverRow.label;
+          if (labelDiv) labelDiv.textContent = driverRow.displayLabel;
+        }
         const previewBox = document.getElementById('summary-preview-box');
         if (previewBox && currentSummaryData) previewBox.textContent = buildSummaryPreviewText(currentSummaryData);
       } catch (err) {
