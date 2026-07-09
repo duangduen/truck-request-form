@@ -1652,10 +1652,8 @@
       const reconfirmNote = g.isContinuing
         ? `<div class="hint" style="color:#a1671b;margin-top:4px;">⚠️ งานต่อเนื่องจากวันก่อน — ทบทวนทีมงานวันนี้อีกครั้ง (คนขับหยุด/รถเสียหรือเปล่า) แก้ไขได้ที่แท็บ "รายการคำขอ" &gt; "จัดคิวแล้ว" &gt; "แก้ไขการจัดคิว"</div>`
         : '';
-      // ขึ้นบรรทัดใหม่ทีละคัน + ใส่เลขลำดับ เฉพาะกลุ่มที่มีรถ 3 คันขึ้นไป กลุ่มเล็กใช้ comma คั่นบรรทัดเดียว (เหมือน formatTruckList_ ฝั่งเซิร์ฟเวอร์)
-      const truckListHtml = g.trucks.length >= 3
-        ? g.trucks.map((t, i) => `${i + 1}) ${escapeHtml(t)}`).join('<br>')
-        : g.trucks.map(t => escapeHtml(t)).join(', ');
+      // comma คั่นบรรทัดเดียว ไม่ขึ้นเลขลำดับ/บรรทัดใหม่ (เหมือน formatTruckList_ ฝั่งเซิร์ฟเวอร์ - ให้ตรงกับข้อความจริงที่จะส่ง)
+      const truckListHtml = g.trucks.map(t => escapeHtml(t)).join(', ');
       card.innerHTML = `
         <div class="summary-group-title">🚧 ${escapeHtml(g.site)} (${g.trucks.length} คัน)${dayLabel}</div>
         <div>${truckListHtml}</div>
@@ -1761,12 +1759,10 @@
     return { emoji: THAI_DAY_COLOR_EMOJI[dayIndex], name: THAI_DAY_NAMES[dayIndex] };
   }
 
-  // จัดรายการรถเป็นเลข "1) ..." ขึ้นบรรทัดใหม่ทีละคัน เฉพาะกลุ่มที่มีรถ 3 คันขึ้นไป กลุ่มเล็กใช้ comma คั่นบรรทัดเดียว
-  // (เหมือนกับ formatTruckList_ ฝั่งเซิร์ฟเวอร์ทุกประการ, 2026-07-19)
+  // คั่นรายการรถด้วย comma บรรทัดเดียว (ไม่ขึ้นเลขลำดับ/ไม่ขึ้นบรรทัดใหม่ทีละคันแล้ว)
+  // เคยลองขึ้นเลขทีละบรรทัดมาก่อน แต่พอข้อความยาวจนโดน LINE ตัดเหลือ "See more" คนจัดกลัวคนขับจะไม่กดอ่านต่อ
+  // เลยขอกลับมาให้สั้นที่สุดแบบเดิม (2026-07-19, เหมือนกับ formatTruckList_ ฝั่งเซิร์ฟเวอร์ทุกประการ)
   function formatTruckList(arr) {
-    if (arr.length >= 3) {
-      return arr.map((item, i) => `${i + 1}) ${item}`).join('\n');
-    }
     return arr.join(', ');
   }
 
