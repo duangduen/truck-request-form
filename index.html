@@ -1771,8 +1771,9 @@
   }
 
   // พรีวิวข้อความฝั่งแอป (รูปแบบเดียวกับที่ฝั่งเซิร์ฟเวอร์จะสร้างจริงตอนกดส่ง)
-  // ปรับให้ compact ขึ้นตามที่คนจัดขอ (2026-07-19): ไม่มีบรรทัดว่างคั่นระหว่างกลุ่ม, ย่อข้อความความคืบหน้างาน,
-  // และรวมสถานะอื่นๆ เป็นหมวดเดียว ใส่ไอคอนกำกับทีละบรรทัดแทน - ต้องตรงกับ buildDailySummaryText_ ใน Code.gs ทุกประการ
+  // ปรับให้ compact ขึ้นตามที่คนจัดขอ (2026-07-19): ย่อข้อความความคืบหน้างาน, รวมสถานะอื่นๆ เป็นหมวดเดียว ใส่ไอคอนกำกับทีละบรรทัดแทน
+  // (ทดลองตัดบรรทัดว่างคั่นกลุ่มออกไปก่อน แต่พอเห็นของจริงหลายกลุ่มแล้วอ่านยาก เลยใส่กลับคืนมา - 2026-07-19)
+  // ต้องตรงกับ buildDailySummaryText_ ใน Code.gs ทุกประการ
   function buildSummaryPreviewText(summary) {
     const dayBadge = getThaiDayBadge(summary.date);
     const lines = [`${dayBadge.emoji} สรุปคิวรถ วัน${dayBadge.name}ที่ ${summary.date}`, ''];
@@ -1780,6 +1781,7 @@
       const dayLabel = g.dayInfo ? ` (${g.dayInfo.dayNumber}/${g.dayInfo.totalDays}, เหลือ ${g.dayInfo.remainingDays} วัน)` : '';
       lines.push(`🚧 ${g.site} (${g.trucks.length} คัน)${dayLabel}`);
       lines.push(formatTruckList(g.trucks));
+      lines.push('');
     });
     const manualSiteGroups = {};
     const icons = { 'หยุด': '⏸', 'จอด': '🅿️', 'ซ่อม/เช็คซ่อม': '🔧', 'วิ่งหินทรายเข้าแพล้นท์': '🏭', 'ยังไม่ระบุสถานะ': '❔' };
@@ -1799,10 +1801,12 @@
     Object.keys(manualSiteGroups).forEach(site => {
       lines.push(`🚧 ${site} (${manualSiteGroups[site].length} คัน)`);
       lines.push(formatTruckList(manualSiteGroups[site]));
+      lines.push('');
     });
     if (otherStatusItems.length > 0) {
       lines.push(`📋 สถานะอื่นๆ (${otherStatusItems.length} คัน)`);
       lines.push(formatTruckList(otherStatusItems));
+      lines.push('');
     }
     return lines.join('\n').trim();
   }
