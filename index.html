@@ -587,7 +587,17 @@
 
   <div id="dispatch-summary-panel" style="display:none;">
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-      <input type="date" id="summary-date-input" style="flex:1;border:1px solid var(--border);border-radius:10px;padding:9px;font-size:15px;box-sizing:border-box;">
+      <!-- รูปแบบวันที่ที่ input type=date แสดงเองขึ้นกับ locale เครื่อง (บางเครื่องขึ้น mm/dd/yyyy) เลยแยกส่วนแสดงผล
+           ออกจากส่วนรับคลิกจริง: กล่อง summary-date-display (มองเห็น, บังคับ dd/mm/yyyy เสมอ, pointer-events:none - ไม่รับคลิกเอง)
+           กับ input type=date จริง (โปร่งใสแต่วางทับด้านบนเต็มพื้นที่ รับคลิก/แตะได้ตรงๆ) - แตะตรงไหนในกล่องก็เท่ากับแตะ
+           ตัว input จริงเสมอ ปฏิทินเปิดได้ชัวร์ทุก browser โดยไม่ต้องพึ่ง showPicker() -->
+      <div style="position:relative;flex:1;">
+        <div id="summary-date-display" style="border:1px solid var(--border);border-radius:10px;padding:9px;font-size:15px;box-sizing:border-box;background:var(--card);display:flex;align-items:center;justify-content:space-between;pointer-events:none;">
+          <span id="summary-date-display-text">เลือกวันที่</span>
+          <span>📅</span>
+        </div>
+        <input type="date" id="summary-date-input" style="position:absolute;left:0;top:0;width:100%;height:100%;margin:0;padding:0;border:0;opacity:0;cursor:pointer;">
+      </div>
       <button type="button" id="summary-load-btn" class="btn-small" style="flex:0 0 auto;padding:0 16px;">โหลด</button>
     </div>
     <div id="summary-content"><p class="hint">เลือกวันที่แล้วกด "โหลด"</p></div>
@@ -1510,6 +1520,7 @@
     document.getElementById('dispatch-requests-panel').style.display = 'none';
     if (!document.getElementById('summary-date-input').value) {
       document.getElementById('summary-date-input').value = todayDateStr();
+      syncSummaryDateDisplay();
       loadDailySummary();
     }
   });
@@ -1519,6 +1530,23 @@
     const pad = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
+
+  // แปลง "yyyy-mm-dd" (ค่าจริงของ input type=date) เป็นข้อความ dd/mm/yyyy ให้แสดงผลเสมอ ไม่ว่า browser จะ render ค่า native ยังไง
+  function formatDDMMYYYY(isoStr) {
+    const parts = String(isoStr || '').split('-');
+    if (parts.length !== 3) return '';
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+
+  function syncSummaryDateDisplay() {
+    const native = document.getElementById('summary-date-input');
+    const text = document.getElementById('summary-date-display-text');
+    text.textContent = formatDDMMYYYY(native.value) || 'เลือกวันที่';
+  }
+
+  // ไม่ต้องมี click listener เปิด picker เอง เพราะ input type=date จริงวางทับเต็มพื้นที่กล่องอยู่แล้ว (โปร่งใส)
+  // แตะที่ไหนในกล่องก็เท่ากับแตะตัว input จริงตรงๆ เปิดปฏิทิน native ได้ปกติทุก browser
+  document.getElementById('summary-date-input').addEventListener('change', syncSummaryDateDisplay);
 
   let currentSummaryDate = null;
   let currentSummaryData = null; // เก็บผลลัพธ์ล่าสุดไว้แก้ในเครื่อง (optimistic update) กันหน้าจอรีเฟรชทั้งหน้าทุกครั้งที่ตั้งสถานะรถทีละคัน
