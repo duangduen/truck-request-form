@@ -265,8 +265,8 @@
   }
 
   /* ====== คำขอของฉัน / จัดคิว / บันทึกการวิ่ง ====== */
-  #my-requests-view, #dispatch-view, #driver-log-view { padding: 16px; display: none; flex-direction: column; gap: 12px; }
-  #my-requests-view.active, #dispatch-view.active, #driver-log-view.active { display: flex; }
+  #my-requests-view, #dispatch-view, #driver-log-view, #trip-history-view { padding: 16px; display: none; flex-direction: column; gap: 12px; }
+  #my-requests-view.active, #dispatch-view.active, #driver-log-view.active, #trip-history-view.active { display: flex; }
 
   .trip-job-card {
     background: var(--card);
@@ -476,6 +476,7 @@
   <button class="tab-btn" data-tab="my-requests-view">คำขอของฉัน</button>
   <button class="tab-btn" data-tab="dispatch-view" id="dispatch-tab-btn" style="display:none;">จัดคิว</button>
   <button class="tab-btn" data-tab="driver-log-view" id="driver-log-tab-btn" style="display:none;">บันทึกการวิ่ง</button>
+  <button class="tab-btn" data-tab="trip-history-view" id="trip-history-tab-btn" style="display:none;">ประวัติการวิ่ง</button>
 </div>
 
 <div id="profile-bar"><span id="loading-profile">กำลังโหลดข้อมูลผู้ใช้...</span></div>
@@ -638,12 +639,46 @@
       </div>
     </div>
     <div class="field">
-      <label>รูปใบส่งของ <span class="required">*</span></label>
-      <input type="file" id="driver-log-photo-input" accept="image/*" capture="environment">
+      <label>รูปใบส่งของ</label>
+      <div class="hint" style="margin-bottom:4px;">ไม่มีรูปตอนนี้ก็บันทึกได้ก่อน แล้วกลับมาแนบทีหลังที่แท็บ "ประวัติการวิ่ง"</div>
+      <input type="file" id="driver-log-photo-input" accept="image/*">
       <img id="driver-log-photo-preview" style="display:none;max-width:100%;border-radius:10px;margin-top:8px;">
     </div>
     <button type="button" id="driver-log-submit-btn">บันทึกการวิ่ง</button>
     <div id="driver-log-status" class="hint"></div>
+  </div>
+</div>
+
+<!-- ============ แท็บประวัติการวิ่ง (คนขับดู/แก้รายการที่ตัวเองเคยบันทึก) ============ -->
+<div id="trip-history-view" class="view">
+  <div class="hint">รายการที่คุณเคยบันทึกไว้เอง แตะรายการเพื่อแก้จำนวนเที่ยว/ระยะทาง หรือแนบรูปใบส่งของที่ยังไม่มี</div>
+  <button type="button" id="trip-history-refresh-btn">รีเฟรช</button>
+  <div id="trip-history-list"><p class="hint">กำลังโหลด...</p></div>
+
+  <div id="trip-history-form" style="display:none;">
+    <div class="field">
+      <label>หน้างาน</label>
+      <div id="trip-history-selected-site" style="font-weight:600;"></div>
+      <div id="trip-history-selected-meta" class="hint"></div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>จำนวนเที่ยว <span class="required">*</span></label>
+        <input type="number" id="trip-history-trip-count" min="1" step="1">
+      </div>
+      <div class="field">
+        <label>ระยะทาง (กม.)</label>
+        <input type="number" id="trip-history-distance" min="0" step="0.1">
+      </div>
+    </div>
+    <div class="field">
+      <label>รูปใบส่งของ</label>
+      <div id="trip-history-current-photo"></div>
+      <input type="file" id="trip-history-photo-input" accept="image/*">
+      <img id="trip-history-photo-preview" style="display:none;max-width:100%;border-radius:10px;margin-top:8px;">
+    </div>
+    <button type="button" id="trip-history-save-btn">บันทึกการแก้ไข</button>
+    <div id="trip-history-status" class="hint"></div>
   </div>
 </div>
 
@@ -1950,6 +1985,7 @@
       const result = await res.json();
       if (result.status === 'ok') {
         document.getElementById('driver-log-tab-btn').style.display = '';
+        document.getElementById('trip-history-tab-btn').style.display = '';
       }
     } catch (err) {
       console.error('เช็คสิทธิ์คนขับไม่สำเร็จ', err);
@@ -2050,7 +2086,7 @@
     const tripCount = document.getElementById('driver-log-trip-count').value;
     const distanceKm = document.getElementById('driver-log-distance').value;
     if (!tripCount || Number(tripCount) <= 0) { alert('กรุณากรอกจำนวนเที่ยวให้ถูกต้อง'); return; }
-    if (!tripPhotoBase64) { alert('กรุณาแนบรูปใบส่งของ'); return; }
+    // ไม่บังคับแนบรูป - ใส่ทีหลังได้ที่แท็บ "ประวัติการวิ่ง" (2026-07-10)
 
     runOnce('logTrip:' + selectedTripJob.requestId, async () => {
       const btn = document.getElementById('driver-log-submit-btn');
@@ -2076,7 +2112,8 @@
         if (result.status !== 'ok') throw new Error(result.message);
 
         statusEl.textContent = `บันทึกแล้ว วิ่งไปแล้ว ${result.totalTrips} / ${result.target} เที่ยว` +
-          (result.totalTrips >= result.target ? ' (ครบตามเป้าหมายแล้ว)' : '');
+          (result.totalTrips >= result.target ? ' (ครบตามเป้าหมายแล้ว)' : '') +
+          (result.hasPhoto ? '' : ' — ยังไม่มีรูปใบส่งของ ใส่ทีหลังได้ที่แท็บ "ประวัติการวิ่ง"');
 
         document.getElementById('driver-log-trip-count').value = '';
         document.getElementById('driver-log-distance').value = '';
@@ -2085,6 +2122,120 @@
         tripPhotoBase64 = '';
 
         loadDriverJobs(); // รีเฟรชรายการ+ยอดสะสมล่าสุด
+      } catch (err) {
+        statusEl.style.color = '#d64545';
+        statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + friendlyErrorMessage(err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  // ---------- ประวัติการวิ่ง (คนขับดู/แก้รายการที่ตัวเองเคยบันทึก) ----------
+  let tripHistoryData = [];
+  let selectedTripHistory = null;
+  let tripHistoryPhotoBase64 = '';
+  let tripHistoryPhotoMimeType = '';
+
+  async function loadTripHistory() {
+    const container = document.getElementById('trip-history-list');
+    container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
+    document.getElementById('trip-history-form').style.display = 'none';
+    selectedTripHistory = null;
+
+    try {
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=myTripLogs&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''));
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+
+      tripHistoryData = result.logs || [];
+      if (tripHistoryData.length === 0) {
+        container.innerHTML = '<p class="hint">ยังไม่มีรายการที่บันทึกไว้</p>';
+        return;
+      }
+
+      container.innerHTML = '';
+      tripHistoryData.forEach((log, idx) => {
+        const card = document.createElement('div');
+        card.className = 'trip-job-card';
+        card.innerHTML = `
+          <div>🚧 ${escapeHtml(log.site)}</div>
+          <div class="trip-job-progress">${escapeHtml(String(log.date))} · ${log.tripCount} เที่ยว${log.distanceKm ? ' · ' + escapeHtml(String(log.distanceKm)) + ' กม.' : ''}</div>
+          <div class="trip-job-progress">${log.photoUrl ? '📷 มีรูปแล้ว' : '⚠️ ยังไม่มีรูปใบส่งของ'}</div>
+        `;
+        card.addEventListener('click', () => selectTripHistory(idx));
+        container.appendChild(card);
+      });
+    } catch (err) {
+      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + friendlyErrorMessage(err) + '</p>';
+    }
+  }
+
+  function selectTripHistory(idx) {
+    selectedTripHistory = tripHistoryData[idx];
+    document.querySelectorAll('#trip-history-list .trip-job-card').forEach((el, i) => el.classList.toggle('selected', i === idx));
+    document.getElementById('trip-history-selected-site').textContent = '🚧 ' + selectedTripHistory.site;
+    document.getElementById('trip-history-selected-meta').textContent =
+      `${selectedTripHistory.date} · บันทึกเมื่อ ${selectedTripHistory.loggedAt}`;
+    document.getElementById('trip-history-trip-count').value = selectedTripHistory.tripCount || '';
+    document.getElementById('trip-history-distance').value = selectedTripHistory.distanceKm || '';
+    document.getElementById('trip-history-current-photo').innerHTML = selectedTripHistory.photoUrl
+      ? `<a href="${selectedTripHistory.photoUrl}" target="_blank">📷 ดูรูปที่แนบไว้</a>`
+      : '<span class="hint">ยังไม่มีรูปใบส่งของ</span>';
+    document.getElementById('trip-history-photo-input').value = '';
+    document.getElementById('trip-history-photo-preview').style.display = 'none';
+    tripHistoryPhotoBase64 = '';
+    document.getElementById('trip-history-form').style.display = '';
+    document.getElementById('trip-history-status').textContent = '';
+  }
+
+  document.getElementById('trip-history-photo-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      tripHistoryPhotoBase64 = await resizeImageToBase64(file);
+      tripHistoryPhotoMimeType = 'image/jpeg';
+      const preview = document.getElementById('trip-history-photo-preview');
+      preview.src = 'data:image/jpeg;base64,' + tripHistoryPhotoBase64;
+      preview.style.display = '';
+    } catch (err) {
+      alert('อ่านรูปไม่สำเร็จ: ' + friendlyErrorMessage(err));
+    }
+  });
+
+  document.getElementById('trip-history-refresh-btn').addEventListener('click', loadTripHistory);
+
+  document.getElementById('trip-history-save-btn').addEventListener('click', () => {
+    if (!selectedTripHistory) { alert('กรุณาเลือกรายการก่อน'); return; }
+    const tripCount = document.getElementById('trip-history-trip-count').value;
+    const distanceKm = document.getElementById('trip-history-distance').value;
+    if (!tripCount || Number(tripCount) <= 0) { alert('กรุณากรอกจำนวนเที่ยวให้ถูกต้อง'); return; }
+
+    runOnce('updateTripLog:' + selectedTripHistory.logId, async () => {
+      const btn = document.getElementById('trip-history-save-btn');
+      const statusEl = document.getElementById('trip-history-status');
+      btn.disabled = true;
+      statusEl.style.color = '';
+      statusEl.textContent = 'กำลังบันทึก...';
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'updateTripLog',
+            lineUserId: lineProfile ? lineProfile.userId : '',
+            logId: selectedTripHistory.logId,
+            tripCount: Number(tripCount),
+            distanceKm: distanceKm ? Number(distanceKm) : '',
+            photoBase64: tripHistoryPhotoBase64,
+            photoMimeType: tripHistoryPhotoMimeType
+          })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+
+        statusEl.textContent = 'บันทึกการแก้ไขแล้ว';
+        loadTripHistory();
       } catch (err) {
         statusEl.style.color = '#d64545';
         statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + friendlyErrorMessage(err);
@@ -2104,6 +2255,7 @@
       if (btn.dataset.tab === 'my-requests-view') loadMyRequests();
       if (btn.dataset.tab === 'dispatch-view') loadPendingRequests();
       if (btn.dataset.tab === 'driver-log-view') loadDriverJobs();
+      if (btn.dataset.tab === 'trip-history-view') loadTripHistory();
     });
   });
 
