@@ -628,6 +628,11 @@
       <div id="driver-log-selected-site" style="font-weight:600;"></div>
       <div id="driver-log-selected-progress" class="hint"></div>
     </div>
+    <div class="field">
+      <label>วันที่บันทึก <span class="required">*</span></label>
+      <input type="date" id="driver-log-date">
+      <div class="hint" style="margin-top:2px;">ลืมบันทึกเมื่อวาน เลือกย้อนหลังได้ (เลือกวันในอนาคตไม่ได้)</div>
+    </div>
     <div class="row">
       <div class="field">
         <label>จำนวนเที่ยว (ครั้งนี้) <span class="required">*</span></label>
@@ -2027,12 +2032,20 @@
     }
   }
 
+  // วันที่ "วันนี้" ตามเวลาไทย ในรูปแบบ yyyy-MM-dd ใช้ตั้งค่าเริ่มต้น/บนสุดของ input วันที่ (กัน device ตั้ง timezone อื่น)
+  function todayBangkokDateStr() {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  }
+
   function selectTripJob(idx) {
     selectedTripJob = driverJobsData[idx];
     document.querySelectorAll('.trip-job-card').forEach((el, i) => el.classList.toggle('selected', i === idx));
     document.getElementById('driver-log-selected-site').textContent = '🚧 ' + selectedTripJob.site;
     document.getElementById('driver-log-selected-progress').textContent =
       `วิ่งไปแล้ว ${selectedTripJob.loggedSoFar} / ${selectedTripJob.target} เที่ยว`;
+    const dateInput = document.getElementById('driver-log-date');
+    dateInput.max = todayBangkokDateStr();
+    dateInput.value = todayBangkokDateStr(); // default วันนี้ทุกครั้งที่เลือกหน้างาน - เลือกย้อนหลังเองได้ถ้าต้องการ
     document.getElementById('driver-log-form').style.display = '';
     document.getElementById('driver-log-status').textContent = '';
   }
@@ -2083,8 +2096,11 @@
 
   document.getElementById('driver-log-submit-btn').addEventListener('click', () => {
     if (!selectedTripJob) { alert('กรุณาเลือกหน้างานก่อน'); return; }
+    const logDate = document.getElementById('driver-log-date').value;
     const tripCount = document.getElementById('driver-log-trip-count').value;
     const distanceKm = document.getElementById('driver-log-distance').value;
+    if (!logDate) { alert('กรุณาเลือกวันที่บันทึก'); return; }
+    if (logDate > todayBangkokDateStr()) { alert('เลือกวันที่ในอนาคตไม่ได้ บันทึกได้แค่วันนี้หรือย้อนหลัง'); return; }
     if (!tripCount || Number(tripCount) <= 0) { alert('กรุณากรอกจำนวนเที่ยวให้ถูกต้อง'); return; }
     // ไม่บังคับแนบรูป - ใส่ทีหลังได้ที่แท็บ "ประวัติการวิ่ง" (2026-07-10)
 
@@ -2102,6 +2118,7 @@
             action: 'logTrip',
             lineUserId: lineProfile ? lineProfile.userId : '',
             requestId: selectedTripJob.requestId,
+            logDate: logDate,
             tripCount: Number(tripCount),
             distanceKm: distanceKm ? Number(distanceKm) : '',
             photoBase64: tripPhotoBase64,
@@ -2115,6 +2132,7 @@
           (result.totalTrips >= result.target ? ' (ครบตามเป้าหมายแล้ว)' : '') +
           (result.hasPhoto ? '' : ' — ยังไม่มีรูปใบส่งของ ใส่ทีหลังได้ที่แท็บ "ประวัติการวิ่ง"');
 
+        document.getElementById('driver-log-date').value = todayBangkokDateStr();
         document.getElementById('driver-log-trip-count').value = '';
         document.getElementById('driver-log-distance').value = '';
         document.getElementById('driver-log-photo-input').value = '';
