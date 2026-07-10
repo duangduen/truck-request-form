@@ -2070,6 +2070,7 @@
   // ---------- บันทึกการวิ่ง (คนขับ) ----------
   let driverJobsData = [];
   let selectedTripJob = null;
+  let selectedTripJobIdx = -1; // เก็บ index ที่เลือกไว้ ใช้เช็คว่าแตะซ้ำการ์ดเดิมหรือเปล่า (แตะซ้ำ = ยกเลิกเลือก)
   let tripPhotoBase64 = '';
   let tripPhotoMimeType = '';
 
@@ -2136,6 +2137,7 @@
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
     formEl.style.display = 'none';
     selectedTripJob = null;
+    selectedTripJobIdx = -1;
 
     try {
       const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=driverJobsForToday&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') +
@@ -2158,7 +2160,7 @@
           ${job.material ? `<div class="trip-job-progress">🪨 ${escapeHtml(job.material)}</div>` : ''}
           <div class="trip-job-progress">วิ่งไปแล้ว ${job.loggedSoFar} / ${job.target} ${escapeHtml(job.unit || 'เที่ยว')}</div>
         `;
-        card.addEventListener('click', () => selectTripJob(idx));
+        card.addEventListener('click', () => { if (selectedTripJobIdx === idx) deselectTripJob(); else selectTripJob(idx); }); // แตะการ์ดที่เลือกอยู่ซ้ำ -> ยกเลิกเลือก ซ่อนการ์ดแก้ไข
         container.appendChild(card);
       });
 
@@ -2173,8 +2175,19 @@
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
   }
 
+  // ยกเลิกการเลือกการ์ด (แตะการ์ดที่เลือกอยู่ซ้ำ) - เอา class selected ออก ซ่อนการ์ดแก้ไข แล้วย้ายกลับตำแหน่งเดิม
+  function deselectTripJob() {
+    selectedTripJob = null;
+    selectedTripJobIdx = -1;
+    document.querySelectorAll('#driver-log-job-list .trip-job-card').forEach(el => el.classList.remove('selected'));
+    const formEl = document.getElementById('driver-log-form');
+    formEl.style.display = 'none';
+    document.getElementById('driver-log-view').appendChild(formEl);
+  }
+
   function selectTripJob(idx) {
     selectedTripJob = driverJobsData[idx];
+    selectedTripJobIdx = idx;
     const cards = document.querySelectorAll('#driver-log-job-list .trip-job-card');
     cards.forEach((el, i) => el.classList.toggle('selected', i === idx));
     document.getElementById('driver-log-selected-site').textContent = '🚧 ' + selectedTripJob.site;
@@ -2305,6 +2318,7 @@
   // ---------- ประวัติการวิ่ง (คนขับดู/แก้รายการที่ตัวเองเคยบันทึก) ----------
   let tripHistoryData = [];
   let selectedTripHistory = null;
+  let selectedTripHistoryIdx = -1; // เก็บ index ที่เลือกไว้ ใช้เช็คว่าแตะซ้ำการ์ดเดิมหรือเปล่า (แตะซ้ำ = ยกเลิกเลือก)
   let tripHistoryPhotoBase64 = '';
   let tripHistoryPhotoMimeType = '';
 
@@ -2333,6 +2347,7 @@
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
     formEl.style.display = 'none';
     selectedTripHistory = null;
+    selectedTripHistoryIdx = -1;
 
     try {
       const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=myTripLogs&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') +
@@ -2356,7 +2371,7 @@
           <div class="trip-job-progress">${escapeHtml(String(log.date))} · ${log.tripCount} ${escapeHtml(log.unit || 'เที่ยว')}${log.distanceKm ? ' · ' + escapeHtml(String(log.distanceKm)) + ' กม.' : ''}</div>
           <div class="trip-job-progress">${log.photoUrl ? '📷 มีรูปแล้ว' : '⚠️ ยังไม่มีรูปใบสั่ง/ใบส่งของ/ตั๋วทอย'}</div>
         `;
-        card.addEventListener('click', () => selectTripHistory(idx));
+        card.addEventListener('click', () => { if (selectedTripHistoryIdx === idx) deselectTripHistory(); else selectTripHistory(idx); }); // แตะการ์ดที่เลือกอยู่ซ้ำ -> ยกเลิกเลือก ซ่อนการ์ดแก้ไข
         container.appendChild(card);
       });
     } catch (err) {
@@ -2364,8 +2379,19 @@
     }
   }
 
+  // ยกเลิกการเลือกการ์ด (แตะการ์ดที่เลือกอยู่ซ้ำ) - เอา class selected ออก ซ่อนการ์ดแก้ไข แล้วย้ายกลับตำแหน่งเดิม
+  function deselectTripHistory() {
+    selectedTripHistory = null;
+    selectedTripHistoryIdx = -1;
+    document.querySelectorAll('#trip-history-list .trip-job-card').forEach(el => el.classList.remove('selected'));
+    const formEl = document.getElementById('trip-history-form');
+    formEl.style.display = 'none';
+    document.getElementById('trip-history-view').appendChild(formEl);
+  }
+
   function selectTripHistory(idx) {
     selectedTripHistory = tripHistoryData[idx];
+    selectedTripHistoryIdx = idx;
     const cards = document.querySelectorAll('#trip-history-list .trip-job-card');
     cards.forEach((el, i) => el.classList.toggle('selected', i === idx));
     document.getElementById('trip-history-selected-site').textContent = '🚧 ' + selectedTripHistory.site +
