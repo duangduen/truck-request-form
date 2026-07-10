@@ -618,7 +618,12 @@
 
 <!-- ============ แท็บบันทึกการวิ่ง (คนขับที่ลงทะเบียนแล้วเท่านั้น) ============ -->
 <div id="driver-log-view" class="view">
-  <div class="hint">เลือกหน้างานของวันนี้ กรอกจำนวนเที่ยว แนบรูปใบส่งของ แล้วกดบันทึก (เฉพาะงานหน่วย "เที่ยว")</div>
+  <div class="hint">เลือกหน้างาน กรอกจำนวนเที่ยว แนบรูปใบส่งของ แล้วกดบันทึก (เฉพาะงานหน่วย "เที่ยว")</div>
+  <div class="field">
+    <label>ดูรายการงานของวันที่</label>
+    <input type="date" id="driver-log-list-date">
+    <div class="hint" style="margin-top:2px;">ลืมบันทึกวันก่อนๆ เลือกย้อนหลังเพื่อดูรายการงานของวันนั้นได้</div>
+  </div>
   <button type="button" id="driver-log-refresh-btn">รีเฟรช</button>
   <div id="driver-log-job-list"><p class="hint">กำลังโหลด...</p></div>
 
@@ -1998,19 +2003,25 @@
   }
 
   async function loadDriverJobs() {
+    const dateInput = document.getElementById('driver-log-list-date');
+    if (!dateInput.max) dateInput.max = todayBangkokDateStr(); // ตั้งครั้งแรกเท่านั้น กันเลือกวันในอนาคต
+    if (!dateInput.value) dateInput.value = todayBangkokDateStr(); // ค่าเริ่มต้นวันนี้ ถ้ายังไม่เคยตั้ง (ไม่ทับค่าที่คนขับเลือกไว้ตอนกด "รีเฟรช")
+    const listDate = dateInput.value;
+
     const container = document.getElementById('driver-log-job-list');
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
     document.getElementById('driver-log-form').style.display = 'none';
     selectedTripJob = null;
 
     try {
-      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=driverJobsForToday&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''));
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=driverJobsForToday&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') +
+        '&date=' + encodeURIComponent(listDate));
       const result = await res.json();
       if (result.status !== 'ok') throw new Error(result.message);
 
       driverJobsData = result.jobs || [];
       if (driverJobsData.length === 0) {
-        container.innerHTML = '<p class="hint">วันนี้ยังไม่มีงานหน่วย "เที่ยว" ที่ถูกจัดคิวให้ทะเบียน ' + escapeHtml(result.plate || '') + '</p>';
+        container.innerHTML = '<p class="hint">ไม่มีงานหน่วย "เที่ยว" ที่ถูกจัดคิวให้ทะเบียน ' + escapeHtml(result.plate || '') + ' ในวันที่เลือก</p>';
         return;
       }
 
@@ -2045,7 +2056,8 @@
       `วิ่งไปแล้ว ${selectedTripJob.loggedSoFar} / ${selectedTripJob.target} เที่ยว`;
     const dateInput = document.getElementById('driver-log-date');
     dateInput.max = todayBangkokDateStr();
-    dateInput.value = todayBangkokDateStr(); // default วันนี้ทุกครั้งที่เลือกหน้างาน - เลือกย้อนหลังเองได้ถ้าต้องการ
+    // default เป็นวันที่กำลังดูรายการงานอยู่ (ช่อง "ดูรายการงานของวันที่" ด้านบน) - ถ้ากำลังดูงานย้อนหลัง ก็ควรบันทึกลงวันนั้นเป็นค่าเริ่มต้น
+    dateInput.value = document.getElementById('driver-log-list-date').value || todayBangkokDateStr();
     document.getElementById('driver-log-form').style.display = '';
     document.getElementById('driver-log-status').textContent = '';
   }
@@ -2093,6 +2105,7 @@
   });
 
   document.getElementById('driver-log-refresh-btn').addEventListener('click', loadDriverJobs);
+  document.getElementById('driver-log-list-date').addEventListener('change', loadDriverJobs); // เปลี่ยนวันที่ดู -> โหลดรายการงานของวันนั้นให้อัตโนมัติ
 
   document.getElementById('driver-log-submit-btn').addEventListener('click', () => {
     if (!selectedTripJob) { alert('กรุณาเลือกหน้างานก่อน'); return; }
@@ -2132,7 +2145,7 @@
           (result.totalTrips >= result.target ? ' (ครบตามเป้าหมายแล้ว)' : '') +
           (result.hasPhoto ? '' : ' — ยังไม่มีรูปใบส่งของ ใส่ทีหลังได้ที่แท็บ "ประวัติการวิ่ง"');
 
-        document.getElementById('driver-log-date').value = todayBangkokDateStr();
+        document.getElementById('driver-log-date').value = document.getElementById('driver-log-list-date').value || todayBangkokDateStr();
         document.getElementById('driver-log-trip-count').value = '';
         document.getElementById('driver-log-distance').value = '';
         document.getElementById('driver-log-photo-input').value = '';
