@@ -662,6 +662,16 @@
 <!-- ============ แท็บประวัติการวิ่ง (คนขับดู/แก้รายการที่ตัวเองเคยบันทึก) ============ -->
 <div id="trip-history-view" class="view">
   <div class="hint">รายการที่คุณเคยบันทึกไว้เอง แตะรายการเพื่อแก้จำนวนเที่ยว/ระยะทาง หรือแนบรูปใบส่งของที่ยังไม่มี</div>
+  <div class="row">
+    <div class="field">
+      <label>จากวันที่</label>
+      <input type="date" id="trip-history-from-date">
+    </div>
+    <div class="field">
+      <label>ถึงวันที่</label>
+      <input type="date" id="trip-history-to-date">
+    </div>
+  </div>
   <button type="button" id="trip-history-refresh-btn">รีเฟรช</button>
   <div id="trip-history-list"><p class="hint">กำลังโหลด...</p></div>
 
@@ -2168,20 +2178,36 @@
   let tripHistoryPhotoBase64 = '';
   let tripHistoryPhotoMimeType = '';
 
+  // ย้อนหลัง n วันจากวันนี้ (เวลาไทย) ในรูปแบบ yyyy-MM-dd - ใช้ตั้งค่าเริ่มต้นช่วงวันที่ของแท็บ "ประวัติการวิ่ง"
+  function daysAgoBangkokDateStr(n) {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  }
+
   async function loadTripHistory() {
+    const fromInput = document.getElementById('trip-history-from-date');
+    const toInput = document.getElementById('trip-history-to-date');
+    // ค่าเริ่มต้นย้อนหลัง 30 วัน - ตั้งครั้งแรกเท่านั้น ไม่ทับช่วงที่คนขับปรับเองไว้ตอนกด "รีเฟรช"
+    if (!fromInput.value) fromInput.value = daysAgoBangkokDateStr(30);
+    if (!toInput.value) { toInput.value = todayBangkokDateStr(); toInput.max = todayBangkokDateStr(); }
+    const fromDate = fromInput.value;
+    const toDate = toInput.value;
+
     const container = document.getElementById('trip-history-list');
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
     document.getElementById('trip-history-form').style.display = 'none';
     selectedTripHistory = null;
 
     try {
-      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=myTripLogs&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''));
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=myTripLogs&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') +
+        '&fromDate=' + encodeURIComponent(fromDate) + '&toDate=' + encodeURIComponent(toDate));
       const result = await res.json();
       if (result.status !== 'ok') throw new Error(result.message);
 
       tripHistoryData = result.logs || [];
       if (tripHistoryData.length === 0) {
-        container.innerHTML = '<p class="hint">ยังไม่มีรายการที่บันทึกไว้</p>';
+        container.innerHTML = '<p class="hint">ไม่มีรายการที่บันทึกไว้ในช่วงวันที่เลือก ลองขยายช่วงวันที่ดู</p>';
         return;
       }
 
@@ -2235,6 +2261,8 @@
   });
 
   document.getElementById('trip-history-refresh-btn').addEventListener('click', loadTripHistory);
+  document.getElementById('trip-history-from-date').addEventListener('change', loadTripHistory);
+  document.getElementById('trip-history-to-date').addEventListener('change', loadTripHistory);
 
   document.getElementById('trip-history-save-btn').addEventListener('click', () => {
     if (!selectedTripHistory) { alert('กรุณาเลือกรายการก่อน'); return; }
