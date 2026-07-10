@@ -521,7 +521,7 @@
 
     <div class="row">
       <div class="field">
-        <label>ปริมาณ <span class="required">*</span></label>
+        <label>ปริมาณ</label>
         <input type="number" id="quantity" min="0" step="0.1">
       </div>
       <div class="field">
@@ -943,7 +943,6 @@
     if (!document.getElementById('site-input').value.trim()) missing.push('รหัส/ชื่อหน้างาน');
     if (!document.getElementById('start-date').value) missing.push('วันเริ่มงาน');
     if (!document.getElementById('material-input').value.trim()) missing.push('วัสดุ');
-    if (!document.getElementById('quantity').value) missing.push('ปริมาณ');
     if (!document.getElementById('unit').value) missing.push('หน่วย');
     return missing;
   }
@@ -1218,6 +1217,13 @@
       .replace(/'/g, '&#39;');
   }
 
+  // ต่อข้อความ "วัสดุ ปริมาณ หน่วย" สำหรับใช้แสดงในการ์ดต่างๆ - ปริมาณไม่บังคับกรอกแล้ว (2026-07-10) ถ้าเว้นว่างไว้
+  // อย่าปล่อยให้เห็นช่องว่างซ้อนกันดูแปลกๆ ใส่ "(ไม่ระบุปริมาณ)" แทนชัดเจนไปเลย (มิเรอร์ formatMaterialLine_ ฝั่ง Code.gs)
+  function formatMaterialLine(material, quantity, unit) {
+    return quantity ? `${escapeHtml(material)} ${escapeHtml(String(quantity))} ${escapeHtml(unit)}`
+                     : `${escapeHtml(material)} ${escapeHtml(unit)} (ไม่ระบุปริมาณ)`;
+  }
+
   async function doUpdateSiteStatus(requestId, siteStatus) {
     const note = await openNoteModal('แจ้งสถานะ: ' + siteStatus);
     if (note === null) return; // กดยกเลิก
@@ -1281,7 +1287,7 @@
             <span class="hint">${r.requestedAt}</span>
           </div>
           <div><strong>${r.site}</strong></div>
-          <div>${r.material} ${r.quantity} ${r.unit} — วันเริ่มงาน ${r.startDate}</div>
+          <div>${formatMaterialLine(r.material, r.quantity, r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
           ${r.expectedEndDate ? `<div class="hint">คาดว่าจะเสร็จ: ${escapeHtml(r.expectedEndDate)}</div>` : ''}
           ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
           ${r.assigned ? `<div class="hint">แจกงาน: ${r.assigned}</div>` : ''}
@@ -1373,7 +1379,7 @@
         <span class="hint">${escapeHtml(r.requestedAt)}</span>
       </div>
       <div><strong>${escapeHtml(r.site)}</strong> — ผู้ขอ: ${escapeHtml(r.requester)}</div>
-      <div>${escapeHtml(r.material)} ${escapeHtml(String(r.quantity))} ${escapeHtml(r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
+      <div>${formatMaterialLine(r.material, r.quantity, r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
       ${r.detail ? `<div class="hint">${escapeHtml(r.detail)}</div>` : ''}
       ${r.phone ? `<div class="hint">โทร: ${escapeHtml(r.phone)}</div>` : ''}
       ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
@@ -1396,7 +1402,7 @@
         <span class="hint">${escapeHtml(r.requestedAt)}</span>
       </div>
       <div><strong>${escapeHtml(r.site)}</strong> — ผู้ขอ: ${escapeHtml(r.requester)}</div>
-      <div>${escapeHtml(r.material)} ${escapeHtml(String(r.quantity))} ${escapeHtml(r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
+      <div>${formatMaterialLine(r.material, r.quantity, r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
       <div class="hint">🚚 แจกงาน: ${escapeHtml(r.assigned || '-')}</div>
       ${r.loggedTrips !== null && r.loggedTrips !== undefined ? `<div class="hint">🚛 วิ่งไปแล้ว ${r.loggedTrips} / ${escapeHtml(String(r.quantity))} ${escapeHtml(r.unit || 'เที่ยว')}</div>` : ''}
       ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
