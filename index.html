@@ -618,7 +618,7 @@
 
 <!-- ============ แท็บบันทึกการวิ่ง (คนขับที่ลงทะเบียนแล้วเท่านั้น) ============ -->
 <div id="driver-log-view" class="view">
-  <div class="hint">เลือกหน้างาน กรอกจำนวนเที่ยว แนบรูปใบส่งของ แล้วกดบันทึก (เฉพาะงานหน่วย "เที่ยว")</div>
+  <div class="hint">เลือกหน้างาน กรอกจำนวนเที่ยว แนบรูปใบสั่ง/ใบส่งของ/ตั๋วทอย แล้วกดบันทึก (เฉพาะงานหน่วย "เที่ยว")</div>
   <div class="field">
     <label>ดูรายการงานของวันที่</label>
     <input type="date" id="driver-log-list-date">
@@ -631,6 +631,7 @@
     <div class="field">
       <label>หน้างานที่เลือก</label>
       <div id="driver-log-selected-site" style="font-weight:600;"></div>
+      <div id="driver-log-selected-material" class="hint"></div>
       <div id="driver-log-selected-progress" class="hint"></div>
     </div>
     <div class="field">
@@ -649,7 +650,7 @@
       </div>
     </div>
     <div class="field">
-      <label>รูปใบส่งของ</label>
+      <label>รูปใบสั่ง/ใบส่งของ/ตั๋วทอย</label>
       <div class="hint" style="margin-bottom:4px;">ไม่มีรูปตอนนี้ก็บันทึกได้ก่อน แล้วกลับมาแนบทีหลังที่แท็บ "ประวัติการวิ่ง"</div>
       <input type="file" id="driver-log-photo-input" accept="image/*">
       <img id="driver-log-photo-preview" style="display:none;max-width:100%;border-radius:10px;margin-top:8px;">
@@ -661,7 +662,7 @@
 
 <!-- ============ แท็บประวัติการวิ่ง (คนขับดู/แก้รายการที่ตัวเองเคยบันทึก) ============ -->
 <div id="trip-history-view" class="view">
-  <div class="hint">รายการที่คุณเคยบันทึกไว้เอง แตะรายการเพื่อแก้จำนวนเที่ยว/ระยะทาง หรือแนบรูปใบส่งของที่ยังไม่มี</div>
+  <div class="hint">รายการที่คุณเคยบันทึกไว้เอง แตะรายการเพื่อแก้จำนวนเที่ยว/ระยะทาง หรือแนบรูปใบสั่ง/ใบส่งของ/ตั๋วทอยที่ยังไม่มี</div>
   <div class="row">
     <div class="field">
       <label>จากวันที่</label>
@@ -692,7 +693,7 @@
       </div>
     </div>
     <div class="field">
-      <label>รูปใบส่งของ</label>
+      <label>รูปใบสั่ง/ใบส่งของ/ตั๋วทอย</label>
       <div id="trip-history-current-photo"></div>
       <input type="file" id="trip-history-photo-input" accept="image/*">
       <img id="trip-history-photo-preview" style="display:none;max-width:100%;border-radius:10px;margin-top:8px;">
@@ -2041,6 +2042,7 @@
         card.className = 'trip-job-card';
         card.innerHTML = `
           <div>🚧 ${escapeHtml(job.site)}</div>
+          ${job.material ? `<div class="trip-job-progress">🪨 ${escapeHtml(job.material)}</div>` : ''}
           <div class="trip-job-progress">วิ่งไปแล้ว ${job.loggedSoFar} / ${job.target} เที่ยว</div>
         `;
         card.addEventListener('click', () => selectTripJob(idx));
@@ -2062,6 +2064,8 @@
     selectedTripJob = driverJobsData[idx];
     document.querySelectorAll('.trip-job-card').forEach((el, i) => el.classList.toggle('selected', i === idx));
     document.getElementById('driver-log-selected-site').textContent = '🚧 ' + selectedTripJob.site;
+    document.getElementById('driver-log-selected-material').textContent =
+      selectedTripJob.material ? '🪨 ' + selectedTripJob.material : '';
     document.getElementById('driver-log-selected-progress').textContent =
       `วิ่งไปแล้ว ${selectedTripJob.loggedSoFar} / ${selectedTripJob.target} เที่ยว`;
     const dateInput = document.getElementById('driver-log-date');
@@ -2153,7 +2157,7 @@
 
         statusEl.textContent = `บันทึกแล้ว วิ่งไปแล้ว ${result.totalTrips} / ${result.target} เที่ยว` +
           (result.totalTrips >= result.target ? ' (ครบตามเป้าหมายแล้ว)' : '') +
-          (result.hasPhoto ? '' : ' — ยังไม่มีรูปใบส่งของ ใส่ทีหลังได้ที่แท็บ "ประวัติการวิ่ง"');
+          (result.hasPhoto ? '' : ' — ยังไม่มีรูปใบสั่ง/ใบส่งของ/ตั๋วทอย ใส่ทีหลังได้ที่แท็บ "ประวัติการวิ่ง"');
 
         document.getElementById('driver-log-date').value = document.getElementById('driver-log-list-date').value || todayBangkokDateStr();
         document.getElementById('driver-log-trip-count').value = '';
@@ -2217,8 +2221,9 @@
         card.className = 'trip-job-card';
         card.innerHTML = `
           <div>🚧 ${escapeHtml(log.site)}</div>
+          ${log.material ? `<div class="trip-job-progress">🪨 ${escapeHtml(log.material)}</div>` : ''}
           <div class="trip-job-progress">${escapeHtml(String(log.date))} · ${log.tripCount} เที่ยว${log.distanceKm ? ' · ' + escapeHtml(String(log.distanceKm)) + ' กม.' : ''}</div>
-          <div class="trip-job-progress">${log.photoUrl ? '📷 มีรูปแล้ว' : '⚠️ ยังไม่มีรูปใบส่งของ'}</div>
+          <div class="trip-job-progress">${log.photoUrl ? '📷 มีรูปแล้ว' : '⚠️ ยังไม่มีรูปใบสั่ง/ใบส่งของ/ตั๋วทอย'}</div>
         `;
         card.addEventListener('click', () => selectTripHistory(idx));
         container.appendChild(card);
@@ -2231,14 +2236,15 @@
   function selectTripHistory(idx) {
     selectedTripHistory = tripHistoryData[idx];
     document.querySelectorAll('#trip-history-list .trip-job-card').forEach((el, i) => el.classList.toggle('selected', i === idx));
-    document.getElementById('trip-history-selected-site').textContent = '🚧 ' + selectedTripHistory.site;
+    document.getElementById('trip-history-selected-site').textContent = '🚧 ' + selectedTripHistory.site +
+      (selectedTripHistory.material ? '  🪨 ' + selectedTripHistory.material : '');
     document.getElementById('trip-history-selected-meta').textContent =
       `${selectedTripHistory.date} · บันทึกเมื่อ ${selectedTripHistory.loggedAt}`;
     document.getElementById('trip-history-trip-count').value = selectedTripHistory.tripCount || '';
     document.getElementById('trip-history-distance').value = selectedTripHistory.distanceKm || '';
     document.getElementById('trip-history-current-photo').innerHTML = selectedTripHistory.photoUrl
       ? `<a href="${selectedTripHistory.photoUrl}" target="_blank">📷 ดูรูปที่แนบไว้</a>`
-      : '<span class="hint">ยังไม่มีรูปใบส่งของ</span>';
+      : '<span class="hint">ยังไม่มีรูปใบสั่ง/ใบส่งของ/ตั๋วทอย</span>';
     document.getElementById('trip-history-photo-input').value = '';
     document.getElementById('trip-history-photo-preview').style.display = 'none';
     tripHistoryPhotoBase64 = '';
