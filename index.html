@@ -278,6 +278,37 @@
   .trip-job-card.selected { border-color: var(--accent, #2f6fed); border-width: 2px; }
   .trip-job-progress { font-size: 13px; color: var(--muted, #666); margin-top: 4px; }
 
+  /* กล่องแสดงผลวันที่แบบไทย (เช่น "10 ก.ค. 2026") ทับด้วย input type=date จริงแบบโปร่งใส - ปฏิทินจริงที่เด้งขึ้นตอนแตะยังเป็นภาษา/รูปแบบของเครื่องอยู่
+     ควบคุมไม่ได้ แต่กล่องแสดงผลด้านนอกบังคับเป็นไทยได้เสมอ (แพทเทิร์นเดียวกับ summary-date-display เดิม ใช้ซ้ำกับทุก date picker ในแท็บบันทึกการวิ่ง/ประวัติการวิ่ง) */
+  .date-overlay-wrap { position: relative; flex: 1; min-width: 0; }
+  .date-overlay-display {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 9px;
+    font-size: 15px;
+    box-sizing: border-box;
+    background: var(--card);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    pointer-events: none;
+  }
+  .date-overlay-input {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer;
+  }
+
+  /* การ์ดแก้ไข/บันทึก ของแท็บบันทึกการวิ่ง+ประวัติการวิ่ง ย้ายมาแทรกต่อจากรายการที่เลือกเอง (ดู selectTripJob/selectTripHistory)
+     ใส่กรอบเน้นสีให้ชัดว่าเป็นการ์ดที่ผูกกับรายการด้านบน ไม่ใช่ปนอยู่ท้ายลิสต์เหมือนก่อนหน้านี้ */
+  #driver-log-form, #trip-history-form {
+    border: 2px solid var(--accent, #2f6fed);
+    border-radius: 12px;
+    padding: 14px;
+    background: #eef4ff;
+    margin: 4px 0 10px 0;
+  }
+
   .request-card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -525,7 +556,7 @@
         <input type="number" id="quantity" min="0" step="0.1">
       </div>
       <div class="field">
-        <label>หน่วย <span class="required">*</span></label>
+        <label>หน่วย</label>
         <select id="unit">
           <option value="">-- เลือก --</option>
           <option value="เที่ยว">เที่ยว</option>
@@ -622,7 +653,13 @@
   <div class="hint">เลือกหน้างาน กรอกจำนวน แนบรูปใบสั่ง/ใบส่งของ/ตั๋วทอย แล้วกดบันทึก (เฉพาะงานหน่วย "เที่ยว"/"พ่วง"/"เทเลอร์")</div>
   <div class="field">
     <label>ดูรายการงานของวันที่</label>
-    <input type="date" id="driver-log-list-date">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <div class="date-overlay-wrap">
+        <div class="date-overlay-display"><span id="driver-log-list-date-display-text">เลือกวันที่</span><span>📅</span></div>
+        <input type="date" id="driver-log-list-date" class="date-overlay-input">
+      </div>
+      <button type="button" id="driver-log-list-date-today-btn" class="btn-small" style="flex:0 0 auto;padding:0 14px;">วันนี้</button>
+    </div>
     <div class="hint" style="margin-top:2px;">ลืมบันทึกวันก่อนๆ เลือกย้อนหลังเพื่อดูรายการงานของวันนั้นได้</div>
   </div>
   <button type="button" id="driver-log-refresh-btn">รีเฟรช</button>
@@ -637,7 +674,13 @@
     </div>
     <div class="field">
       <label>วันที่บันทึก <span class="required">*</span></label>
-      <input type="date" id="driver-log-date">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div class="date-overlay-wrap">
+          <div class="date-overlay-display"><span id="driver-log-date-display-text">เลือกวันที่</span><span>📅</span></div>
+          <input type="date" id="driver-log-date" class="date-overlay-input">
+        </div>
+        <button type="button" id="driver-log-date-today-btn" class="btn-small" style="flex:0 0 auto;padding:0 14px;">วันนี้</button>
+      </div>
       <div class="hint" style="margin-top:2px;">ลืมบันทึกเมื่อวาน เลือกย้อนหลังได้ (เลือกวันในอนาคตไม่ได้)</div>
     </div>
     <div class="row">
@@ -675,11 +718,23 @@
   <div class="row">
     <div class="field">
       <label>จากวันที่</label>
-      <input type="date" id="trip-history-from-date">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <div class="date-overlay-wrap">
+          <div class="date-overlay-display"><span id="trip-history-from-date-display-text">เลือกวันที่</span><span>📅</span></div>
+          <input type="date" id="trip-history-from-date" class="date-overlay-input">
+        </div>
+        <button type="button" id="trip-history-from-date-today-btn" class="btn-small" style="flex:0 0 auto;padding:0 10px;">วันนี้</button>
+      </div>
     </div>
     <div class="field">
       <label>ถึงวันที่</label>
-      <input type="date" id="trip-history-to-date">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <div class="date-overlay-wrap">
+          <div class="date-overlay-display"><span id="trip-history-to-date-display-text">เลือกวันที่</span><span>📅</span></div>
+          <input type="date" id="trip-history-to-date" class="date-overlay-input">
+        </div>
+        <button type="button" id="trip-history-to-date-today-btn" class="btn-small" style="flex:0 0 auto;padding:0 10px;">วันนี้</button>
+      </div>
     </div>
   </div>
   <button type="button" id="trip-history-refresh-btn">รีเฟรช</button>
@@ -943,7 +998,6 @@
     if (!document.getElementById('site-input').value.trim()) missing.push('รหัส/ชื่อหน้างาน');
     if (!document.getElementById('start-date').value) missing.push('วันเริ่มงาน');
     if (!document.getElementById('material-input').value.trim()) missing.push('วัสดุ');
-    if (!document.getElementById('unit').value) missing.push('หน่วย');
     return missing;
   }
 
@@ -2019,6 +2073,39 @@
   let tripPhotoBase64 = '';
   let tripPhotoMimeType = '';
 
+  // ---------- ตัวช่วยแสดงผลวันที่แบบไทย + ปุ่ม "วันนี้" (ใช้กับ date picker ทุกตัวในแท็บบันทึกการวิ่ง/ประวัติการวิ่ง) ----------
+  const THAI_MONTHS_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  // แปลง yyyy-MM-dd เป็นข้อความไทยอ่านง่าย เช่น "10 ก.ค. 2026" - ปฏิทินจริงที่เด้งขึ้นตอนแตะยังเป็นภาษา/รูปแบบของเครื่องอยู่ ควบคุมไม่ได้
+  // แต่กล่องแสดงผลด้านนอก (.date-overlay-display) บังคับเป็นไทยได้เสมอ เหมือนแพทเทิร์น dd/mm/yyyy ของ summary-date-display เดิม
+  function formatThaiDateShort(dateStr) {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    const y = Number(parts[0]), m = Number(parts[1]), d = Number(parts[2]);
+    if (!y || !m || !d) return dateStr;
+    return `${d} ${THAI_MONTHS_SHORT[m - 1]} ${y}`;
+  }
+
+  // ผูก input[type=date] จริง (โปร่งใส ทับกล่องแสดงผล) เข้ากับกล่องข้อความไทย + ปุ่ม "วันนี้" (ถ้ามี) - คืนฟังก์ชัน sync ไว้เรียกเองตอนตั้งค่า
+  // input.value จาก JS โดยตรง (เช่นตอนเลือกรายการ) เพราะการตั้งค่าแบบนั้นไม่ยิง event 'change' ให้อัตโนมัติ
+  function wireDateOverlay(inputId, displayTextId, todayBtnId, onChange) {
+    const input = document.getElementById(inputId);
+    const displayText = document.getElementById(displayTextId);
+    const sync = () => { displayText.textContent = input.value ? formatThaiDateShort(input.value) : 'เลือกวันที่'; };
+    input.addEventListener('change', () => { sync(); if (onChange) onChange(); });
+    sync();
+    if (todayBtnId) {
+      const btn = document.getElementById(todayBtnId);
+      if (btn) {
+        btn.addEventListener('click', () => {
+          input.value = todayBangkokDateStr();
+          sync();
+          if (onChange) onChange();
+        });
+      }
+    }
+    return sync;
+  }
+
   // เช็คฝั่งเซิร์ฟเวอร์ว่า LINE User ID นี้ลงทะเบียนเป็นคนขับไว้แล้วหรือยัง (ผ่านไลน์บอท) - เผยแท็บถ้าใช่ เหมือนแพทเทิร์น
   // checkDispatcherAndSetup - การซ่อน/โชว์แท็บเป็นแค่ UX, logTrip ฝั่ง Code.gs เช็คสิทธิ์ซ้ำทุกครั้งอยู่แล้ว
   async function checkDriverAndSetup() {
@@ -2039,11 +2126,15 @@
     const dateInput = document.getElementById('driver-log-list-date');
     if (!dateInput.max) dateInput.max = todayBangkokDateStr(); // ตั้งครั้งแรกเท่านั้น กันเลือกวันในอนาคต
     if (!dateInput.value) dateInput.value = todayBangkokDateStr(); // ค่าเริ่มต้นวันนี้ ถ้ายังไม่เคยตั้ง (ไม่ทับค่าที่คนขับเลือกไว้ตอนกด "รีเฟรช")
+    syncDriverLogListDate();
     const listDate = dateInput.value;
 
     const container = document.getElementById('driver-log-job-list');
+    const formEl = document.getElementById('driver-log-form');
+    // ย้ายการ์ดแก้ไขกลับตำแหน่งเดิมก่อนเคลียร์ลิสต์ กันโดนลบทิ้งไปพร้อม innerHTML='' ถ้าเคยถูกย้ายเข้าไปในลิสต์ตอนเลือกรายการรอบก่อน
+    document.getElementById('driver-log-view').appendChild(formEl);
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
-    document.getElementById('driver-log-form').style.display = 'none';
+    formEl.style.display = 'none';
     selectedTripJob = null;
 
     try {
@@ -2084,7 +2175,8 @@
 
   function selectTripJob(idx) {
     selectedTripJob = driverJobsData[idx];
-    document.querySelectorAll('.trip-job-card').forEach((el, i) => el.classList.toggle('selected', i === idx));
+    const cards = document.querySelectorAll('#driver-log-job-list .trip-job-card');
+    cards.forEach((el, i) => el.classList.toggle('selected', i === idx));
     document.getElementById('driver-log-selected-site').textContent = '🚧 ' + selectedTripJob.site;
     document.getElementById('driver-log-selected-material').textContent =
       selectedTripJob.material ? '🪨 ' + selectedTripJob.material : '';
@@ -2096,7 +2188,12 @@
     dateInput.max = todayBangkokDateStr();
     // default เป็นวันที่กำลังดูรายการงานอยู่ (ช่อง "ดูรายการงานของวันที่" ด้านบน) - ถ้ากำลังดูงานย้อนหลัง ก็ควรบันทึกลงวันนั้นเป็นค่าเริ่มต้น
     dateInput.value = document.getElementById('driver-log-list-date').value || todayBangkokDateStr();
-    document.getElementById('driver-log-form').style.display = '';
+    syncDriverLogDate();
+    const formEl = document.getElementById('driver-log-form');
+    // ย้ายการ์ดแก้ไข/บันทึกมาแทรกต่อจากรายการที่เพิ่งเลือกทันที (แทนที่จะค้างอยู่ท้ายลิสต์เหมือนเดิม) กันหาไม่เจอเวลามีหลายรายการ
+    if (cards[idx]) cards[idx].insertAdjacentElement('afterend', formEl);
+    formEl.style.display = '';
+    formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     document.getElementById('driver-log-status').textContent = '';
   }
 
@@ -2143,7 +2240,9 @@
   });
 
   document.getElementById('driver-log-refresh-btn').addEventListener('click', loadDriverJobs);
-  document.getElementById('driver-log-list-date').addEventListener('change', loadDriverJobs); // เปลี่ยนวันที่ดู -> โหลดรายการงานของวันนั้นให้อัตโนมัติ
+  // wireDateOverlay ผูก change listener + ปุ่ม "วันนี้" ให้ในตัว (เปลี่ยนวันที่ดู -> โหลดรายการงานของวันนั้นให้อัตโนมัติ) พร้อมซิงค์กล่องแสดงผลภาษาไทย
+  const syncDriverLogListDate = wireDateOverlay('driver-log-list-date', 'driver-log-list-date-display-text', 'driver-log-list-date-today-btn', loadDriverJobs);
+  const syncDriverLogDate = wireDateOverlay('driver-log-date', 'driver-log-date-display-text', 'driver-log-date-today-btn', null);
 
   document.getElementById('driver-log-submit-btn').addEventListener('click', () => {
     if (!selectedTripJob) { alert('กรุณาเลือกหน้างานก่อน'); return; }
@@ -2186,6 +2285,7 @@
           (result.hasPhoto ? '' : ' — ยังไม่มีรูปใบสั่ง/ใบส่งของ/ตั๋วทอย ใส่ทีหลังได้ที่แท็บ "ประวัติการวิ่ง"');
 
         document.getElementById('driver-log-date').value = document.getElementById('driver-log-list-date').value || todayBangkokDateStr();
+        syncDriverLogDate();
         document.getElementById('driver-log-trip-count').value = '';
         document.getElementById('driver-log-distance').value = '';
         document.getElementById('driver-log-photo-input').value = '';
@@ -2221,12 +2321,17 @@
     // ค่าเริ่มต้นย้อนหลัง 30 วัน - ตั้งครั้งแรกเท่านั้น ไม่ทับช่วงที่คนขับปรับเองไว้ตอนกด "รีเฟรช"
     if (!fromInput.value) fromInput.value = daysAgoBangkokDateStr(30);
     if (!toInput.value) { toInput.value = todayBangkokDateStr(); toInput.max = todayBangkokDateStr(); }
+    syncTripHistoryFromDate();
+    syncTripHistoryToDate();
     const fromDate = fromInput.value;
     const toDate = toInput.value;
 
     const container = document.getElementById('trip-history-list');
+    const formEl = document.getElementById('trip-history-form');
+    // ย้ายการ์ดแก้ไขกลับตำแหน่งเดิมก่อนเคลียร์ลิสต์ กันโดนลบทิ้งไปพร้อม innerHTML='' ถ้าเคยถูกย้ายเข้าไปในลิสต์ตอนเลือกรายการรอบก่อน
+    document.getElementById('trip-history-view').appendChild(formEl);
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
-    document.getElementById('trip-history-form').style.display = 'none';
+    formEl.style.display = 'none';
     selectedTripHistory = null;
 
     try {
@@ -2261,7 +2366,8 @@
 
   function selectTripHistory(idx) {
     selectedTripHistory = tripHistoryData[idx];
-    document.querySelectorAll('#trip-history-list .trip-job-card').forEach((el, i) => el.classList.toggle('selected', i === idx));
+    const cards = document.querySelectorAll('#trip-history-list .trip-job-card');
+    cards.forEach((el, i) => el.classList.toggle('selected', i === idx));
     document.getElementById('trip-history-selected-site').textContent = '🚧 ' + selectedTripHistory.site +
       (selectedTripHistory.material ? '  🪨 ' + selectedTripHistory.material : '');
     document.getElementById('trip-history-selected-meta').textContent =
@@ -2275,7 +2381,11 @@
     document.getElementById('trip-history-photo-input').value = '';
     document.getElementById('trip-history-photo-preview').style.display = 'none';
     tripHistoryPhotoBase64 = '';
-    document.getElementById('trip-history-form').style.display = '';
+    const formEl = document.getElementById('trip-history-form');
+    // ย้ายการ์ดแก้ไขมาแทรกต่อจากรายการที่เพิ่งเลือกทันที (แทนที่จะค้างอยู่ท้ายลิสต์เหมือนเดิม) กันหาไม่เจอเวลามีหลายรายการ
+    if (cards[idx]) cards[idx].insertAdjacentElement('afterend', formEl);
+    formEl.style.display = '';
+    formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     document.getElementById('trip-history-status').textContent = '';
   }
 
@@ -2294,8 +2404,9 @@
   });
 
   document.getElementById('trip-history-refresh-btn').addEventListener('click', loadTripHistory);
-  document.getElementById('trip-history-from-date').addEventListener('change', loadTripHistory);
-  document.getElementById('trip-history-to-date').addEventListener('change', loadTripHistory);
+  // wireDateOverlay ผูก change listener + ปุ่ม "วันนี้" ให้ในตัว พร้อมซิงค์กล่องแสดงผลภาษาไทย
+  const syncTripHistoryFromDate = wireDateOverlay('trip-history-from-date', 'trip-history-from-date-display-text', 'trip-history-from-date-today-btn', loadTripHistory);
+  const syncTripHistoryToDate = wireDateOverlay('trip-history-to-date', 'trip-history-to-date-display-text', 'trip-history-to-date-today-btn', loadTripHistory);
 
   document.getElementById('trip-history-save-btn').addEventListener('click', () => {
     if (!selectedTripHistory) { alert('กรุณาเลือกรายการก่อน'); return; }
