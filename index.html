@@ -264,9 +264,19 @@
     display: none;
   }
 
-  /* ====== คำขอของฉัน / จัดคิว ====== */
-  #my-requests-view, #dispatch-view { padding: 16px; display: none; flex-direction: column; gap: 12px; }
-  #my-requests-view.active, #dispatch-view.active { display: flex; }
+  /* ====== คำขอของฉัน / จัดคิว / บันทึกการวิ่ง ====== */
+  #my-requests-view, #dispatch-view, #driver-log-view { padding: 16px; display: none; flex-direction: column; gap: 12px; }
+  #my-requests-view.active, #dispatch-view.active, #driver-log-view.active { display: flex; }
+
+  .trip-job-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    cursor: pointer;
+  }
+  .trip-job-card.selected { border-color: var(--accent, #2f6fed); border-width: 2px; }
+  .trip-job-progress { font-size: 13px; color: var(--muted, #666); margin-top: 4px; }
 
   .request-card {
     background: var(--card);
@@ -465,6 +475,7 @@
   <button class="tab-btn active" data-tab="form-view">ส่งคำขอใหม่</button>
   <button class="tab-btn" data-tab="my-requests-view">คำขอของฉัน</button>
   <button class="tab-btn" data-tab="dispatch-view" id="dispatch-tab-btn" style="display:none;">จัดคิว</button>
+  <button class="tab-btn" data-tab="driver-log-view" id="driver-log-tab-btn" style="display:none;">บันทึกการวิ่ง</button>
 </div>
 
 <div id="profile-bar"><span id="loading-profile">กำลังโหลดข้อมูลผู้ใช้...</span></div>
@@ -604,6 +615,38 @@
   </div>
 </div>
 
+<!-- ============ แท็บบันทึกการวิ่ง (คนขับที่ลงทะเบียนแล้วเท่านั้น) ============ -->
+<div id="driver-log-view" class="view">
+  <div class="hint">เลือกหน้างานของวันนี้ กรอกจำนวนเที่ยว แนบรูปใบส่งของ แล้วกดบันทึก (เฉพาะงานหน่วย "เที่ยว")</div>
+  <button type="button" id="driver-log-refresh-btn">รีเฟรช</button>
+  <div id="driver-log-job-list"><p class="hint">กำลังโหลด...</p></div>
+
+  <div id="driver-log-form" style="display:none;">
+    <div class="field">
+      <label>หน้างานที่เลือก</label>
+      <div id="driver-log-selected-site" style="font-weight:600;"></div>
+      <div id="driver-log-selected-progress" class="hint"></div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>จำนวนเที่ยว (ครั้งนี้) <span class="required">*</span></label>
+        <input type="number" id="driver-log-trip-count" min="1" step="1">
+      </div>
+      <div class="field">
+        <label>ระยะทาง (กม.)</label>
+        <input type="number" id="driver-log-distance" min="0" step="0.1">
+      </div>
+    </div>
+    <div class="field">
+      <label>รูปใบส่งของ <span class="required">*</span></label>
+      <input type="file" id="driver-log-photo-input" accept="image/*" capture="environment">
+      <img id="driver-log-photo-preview" style="display:none;max-width:100%;border-radius:10px;margin-top:8px;">
+    </div>
+    <button type="button" id="driver-log-submit-btn">บันทึกการวิ่ง</button>
+    <div id="driver-log-status" class="hint"></div>
+  </div>
+</div>
+
 <!-- ============ กล่องเลือกคนขับตอนจัดคิว (ติ๊กเลือกได้หลายคันพร้อมกัน) ============ -->
 <div id="assign-modal-overlay" class="modal-overlay">
   <div class="modal-box map-modal-box">
@@ -733,7 +776,19 @@
       const reqInput = document.getElementById('requester-input');
       if (!reqInput.value) reqInput.value = lineProfile.displayName;
 
-      checkDispatcherAndSetup(); // เผยแท็บ "จัดคิว" ถ้า LINE User ID นี้อยู่ในลิสต์ฝ่ายจัดคิว
+      await Promise.all([
+        checkDispatcherAndSetup(), // เผยแท็บ "จัดคิว" ถ้า LINE User ID นี้อยู่ในลิสต์ฝ่ายจัดคิว
+        checkDriverAndSetup()      // เผยแท็บ "บันทึกการวิ่ง" ถ้า LINE User ID นี้ลงทะเบียนเป็นคนขับไว้แล้ว
+      ]);
+
+      // รองรับ deep-link เปิดแท็บที่กำหนดโดยตรง เช่น ปุ่ม Rich Menu "บันทึกการวิ่ง"
+      // ที่ลิงก์เป็น https://liff.line.me/{LIFF_ID}?tab=driver-log-view
+      // (ต้องรอเช็คสิทธิ์ด้านบนเสร็จก่อน เพราะแท็บที่ต้องการอาจยังถูกซ่อนอยู่)
+      const requestedTab = new URLSearchParams(location.search).get('tab');
+      if (requestedTab) {
+        const targetBtn = document.querySelector(`.tab-btn[data-tab="${requestedTab}"]`);
+        if (targetBtn && targetBtn.style.display !== 'none') targetBtn.click();
+      }
     } catch (err) {
       document.getElementById('profile-bar').innerHTML =
         '<span style="color:#d64545">โหลดโปรไฟล์ LINE ไม่สำเร็จ (เปิดนอกแอป LINE หรือยังไม่ได้ตั้งค่า LIFF_ID)</span>';
@@ -1159,6 +1214,7 @@
           ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
           ${r.assigned ? `<div class="hint">แจกงาน: ${r.assigned}</div>` : ''}
           ${r.progressStatus && r.status.indexOf('ยกเลิก') === -1 ? `<div class="hint">ความคืบหน้า: ${escapeHtml(r.progressStatus)}</div>` : ''}
+          ${r.loggedTrips !== null && r.loggedTrips !== undefined ? `<div class="hint">🚛 วิ่งไปแล้ว ${r.loggedTrips} / ${escapeHtml(String(r.quantity))} เที่ยว</div>` : ''}
           ${canEdit ? `<div class="card-actions">
               <button class="btn-small edit-btn">แก้ไข</button>
               <button class="btn-small cancel-btn">ยกเลิก</button>
@@ -1270,6 +1326,7 @@
       <div><strong>${escapeHtml(r.site)}</strong> — ผู้ขอ: ${escapeHtml(r.requester)}</div>
       <div>${escapeHtml(r.material)} ${escapeHtml(String(r.quantity))} ${escapeHtml(r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
       <div class="hint">🚚 แจกงาน: ${escapeHtml(r.assigned || '-')}</div>
+      ${r.loggedTrips !== null && r.loggedTrips !== undefined ? `<div class="hint">🚛 วิ่งไปแล้ว ${r.loggedTrips} / ${escapeHtml(String(r.quantity))} เที่ยว</div>` : ''}
       ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
       <div class="card-actions">
         <button class="btn-small edit-btn assign-btn">แก้ไขการจัดคิว</button>
@@ -1878,6 +1935,165 @@
 
   document.getElementById('summary-load-btn').addEventListener('click', loadDailySummary);
 
+  // ---------- บันทึกการวิ่ง (คนขับ) ----------
+  let driverJobsData = [];
+  let selectedTripJob = null;
+  let tripPhotoBase64 = '';
+  let tripPhotoMimeType = '';
+
+  // เช็คฝั่งเซิร์ฟเวอร์ว่า LINE User ID นี้ลงทะเบียนเป็นคนขับไว้แล้วหรือยัง (ผ่านไลน์บอท) - เผยแท็บถ้าใช่ เหมือนแพทเทิร์น
+  // checkDispatcherAndSetup - การซ่อน/โชว์แท็บเป็นแค่ UX, logTrip ฝั่ง Code.gs เช็คสิทธิ์ซ้ำทุกครั้งอยู่แล้ว
+  async function checkDriverAndSetup() {
+    if (!lineProfile) return;
+    try {
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=driverJobsForToday&userId=' + encodeURIComponent(lineProfile.userId));
+      const result = await res.json();
+      if (result.status === 'ok') {
+        document.getElementById('driver-log-tab-btn').style.display = '';
+      }
+    } catch (err) {
+      console.error('เช็คสิทธิ์คนขับไม่สำเร็จ', err);
+    }
+  }
+
+  async function loadDriverJobs() {
+    const container = document.getElementById('driver-log-job-list');
+    container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
+    document.getElementById('driver-log-form').style.display = 'none';
+    selectedTripJob = null;
+
+    try {
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=driverJobsForToday&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''));
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+
+      driverJobsData = result.jobs || [];
+      if (driverJobsData.length === 0) {
+        container.innerHTML = '<p class="hint">วันนี้ยังไม่มีงานหน่วย "เที่ยว" ที่ถูกจัดคิวให้ทะเบียน ' + escapeHtml(result.plate || '') + '</p>';
+        return;
+      }
+
+      container.innerHTML = '';
+      driverJobsData.forEach((job, idx) => {
+        const card = document.createElement('div');
+        card.className = 'trip-job-card';
+        card.innerHTML = `
+          <div>🚧 ${escapeHtml(job.site)}</div>
+          <div class="trip-job-progress">วิ่งไปแล้ว ${job.loggedSoFar} / ${job.target} เที่ยว</div>
+        `;
+        card.addEventListener('click', () => selectTripJob(idx));
+        container.appendChild(card);
+      });
+
+      if (driverJobsData.length === 1) selectTripJob(0); // มีงานเดียว เลือกให้อัตโนมัติ ลดขั้นตอนคนขับ
+    } catch (err) {
+      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + friendlyErrorMessage(err) + '</p>';
+    }
+  }
+
+  function selectTripJob(idx) {
+    selectedTripJob = driverJobsData[idx];
+    document.querySelectorAll('.trip-job-card').forEach((el, i) => el.classList.toggle('selected', i === idx));
+    document.getElementById('driver-log-selected-site').textContent = '🚧 ' + selectedTripJob.site;
+    document.getElementById('driver-log-selected-progress').textContent =
+      `วิ่งไปแล้ว ${selectedTripJob.loggedSoFar} / ${selectedTripJob.target} เที่ยว`;
+    document.getElementById('driver-log-form').style.display = '';
+    document.getElementById('driver-log-status').textContent = '';
+  }
+
+  // ย่อรูปก่อนแปลงเป็น base64 กันไฟล์ใหญ่เกินไป (กล้องมือถือถ่ายมามักหลาย MB ต่อรูป โพสต์ตรงๆ อาจช้า/ล้ม)
+  // ย่อด้านกว้างสุดไม่เกิน 1280px แล้วบีบอัดเป็น JPEG คุณภาพ 80% - ยังอ่านใบส่งของได้ชัดพอ แต่ไฟล์เล็กลงมาก
+  function resizeImageToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 1280;
+          let w = img.width, h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+            else { w = Math.round(w * maxDim / h); h = maxDim; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          resolve(dataUrl.split(',')[1]); // ตัด "data:image/jpeg;base64," ออก เหลือแค่ตัว base64 ล้วน
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  document.getElementById('driver-log-photo-input').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      tripPhotoBase64 = await resizeImageToBase64(file);
+      tripPhotoMimeType = 'image/jpeg';
+      const preview = document.getElementById('driver-log-photo-preview');
+      preview.src = 'data:image/jpeg;base64,' + tripPhotoBase64;
+      preview.style.display = '';
+    } catch (err) {
+      alert('อ่านรูปไม่สำเร็จ: ' + friendlyErrorMessage(err));
+    }
+  });
+
+  document.getElementById('driver-log-refresh-btn').addEventListener('click', loadDriverJobs);
+
+  document.getElementById('driver-log-submit-btn').addEventListener('click', () => {
+    if (!selectedTripJob) { alert('กรุณาเลือกหน้างานก่อน'); return; }
+    const tripCount = document.getElementById('driver-log-trip-count').value;
+    const distanceKm = document.getElementById('driver-log-distance').value;
+    if (!tripCount || Number(tripCount) <= 0) { alert('กรุณากรอกจำนวนเที่ยวให้ถูกต้อง'); return; }
+    if (!tripPhotoBase64) { alert('กรุณาแนบรูปใบส่งของ'); return; }
+
+    runOnce('logTrip:' + selectedTripJob.requestId, async () => {
+      const btn = document.getElementById('driver-log-submit-btn');
+      const statusEl = document.getElementById('driver-log-status');
+      btn.disabled = true;
+      statusEl.style.color = '';
+      statusEl.textContent = 'กำลังบันทึก...';
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'logTrip',
+            lineUserId: lineProfile ? lineProfile.userId : '',
+            requestId: selectedTripJob.requestId,
+            tripCount: Number(tripCount),
+            distanceKm: distanceKm ? Number(distanceKm) : '',
+            photoBase64: tripPhotoBase64,
+            photoMimeType: tripPhotoMimeType
+          })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+
+        statusEl.textContent = `บันทึกแล้ว วิ่งไปแล้ว ${result.totalTrips} / ${result.target} เที่ยว` +
+          (result.totalTrips >= result.target ? ' (ครบตามเป้าหมายแล้ว)' : '');
+
+        document.getElementById('driver-log-trip-count').value = '';
+        document.getElementById('driver-log-distance').value = '';
+        document.getElementById('driver-log-photo-input').value = '';
+        document.getElementById('driver-log-photo-preview').style.display = 'none';
+        tripPhotoBase64 = '';
+
+        loadDriverJobs(); // รีเฟรชรายการ+ยอดสะสมล่าสุด
+      } catch (err) {
+        statusEl.style.color = '#d64545';
+        statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + friendlyErrorMessage(err);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
   // ---------- tab switching ----------
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1887,6 +2103,7 @@
       document.getElementById(btn.dataset.tab).classList.add('active');
       if (btn.dataset.tab === 'my-requests-view') loadMyRequests();
       if (btn.dataset.tab === 'dispatch-view') loadPendingRequests();
+      if (btn.dataset.tab === 'driver-log-view') loadDriverJobs();
     });
   });
 
