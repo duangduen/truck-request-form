@@ -1170,7 +1170,10 @@
   // เพราะกด "เสร็จแล้ว" (สถานะหน้างาน) จุดเดียวก็ปิดงานให้แล้วอัตโนมัติอยู่แล้ว (ดู updateSiteStatus ใน Code.gs)
   // ไม่บังคับให้ช่างต้องกด 2 รอบ ป้องกันลืมกดปุ่มที่สอง
 
-  function doCancel(requestId) {
+  // closeAfter = true เฉพาะตอนมาจากปุ่ม "ยกเลิก" ในการ์ดรายละเอียดบนแชท LINE (autoAction=cancel) - ยกเลิกสำเร็จแล้วปิด LIFF ไปเลย
+  // ไม่ต้องค้างหน้าคำขอนั้นให้ดู เพราะมีข้อความแจ้งกลุ่มยืนยันการยกเลิกอยู่แล้วจากฝั่งเซิร์ฟเวอร์ (notifyCancel) (2026-07-19 ตามที่ผู้ใช้ขอ)
+  // ปุ่ม "ยกเลิก" ปกติในลิสต์ (closeAfter = false) ยังคง refresh หน้าเดิมต่อเหมือนเดิม เพราะผู้ใช้เปิดแอปมาดูลิสต์เองอยู่แล้ว ปิดแอปให้เองจะกวนเกินไป
+  function doCancel(requestId, closeAfter) {
     if (!confirm('ยืนยันยกเลิกคำขอนี้?')) return;
     runOnce('cancel:' + requestId, async () => {
       try {
@@ -1181,6 +1184,10 @@
         });
         const result = await res.json();
         if (result.status !== 'ok') throw new Error(result.message);
+        if (closeAfter && window.liff && liff.isInClient && liff.isInClient()) {
+          liff.closeWindow();
+          return;
+        }
         loadMyRequests();
       } catch (err) {
         alert('ยกเลิกไม่สำเร็จ: ' + friendlyErrorMessage(err));
@@ -1461,7 +1468,7 @@
           targetCard.classList.add('focused-card');
           setTimeout(() => targetCard.classList.remove('focused-card'), 3000);
           if (targetRequest && autoAction === 'cancel' && targetRequest.status === 'รอจัดคิว') {
-            doCancel(focusId); // doCancel มี confirm() บังคับอยู่แล้ว ไม่ยกเลิกทันทีโดยไม่ถาม
+            doCancel(focusId, true); // doCancel มี confirm() บังคับอยู่แล้ว ไม่ยกเลิกทันทีโดยไม่ถาม - closeAfter=true ปิด LIFF ให้เองถ้ายกเลิกสำเร็จ (2026-07-19)
           }
         }
       }
