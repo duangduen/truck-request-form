@@ -314,6 +314,11 @@
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 14px;
+    transition: box-shadow 0.3s, border-color 0.3s;
+  }
+  .request-card.focused-card {
+    border-color: #2f6fed;
+    box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.25);
   }
   .request-card-header {
     display: flex;
@@ -844,6 +849,10 @@
 
   let lineProfile = null;
   let editingRequestId = null;
+  // รองรับ deep-link จากการ์ด Flex ในแชท LINE ("รายละเอียดคำขอ" -> ปุ่ม แก้ไข/ยกเลิก) ให้กระโดดตรงไปคำขอใบนั้นเลยแทนที่จะเปิดมาเจอลิสต์รวม (2026-07-18)
+  // ใช้ครั้งเดียวตอนโหลดครั้งแรกจาก URL param แล้วเคลียร์ทิ้ง กันไม่ให้กระโดด/เด้ง confirm() ซ้ำทุกครั้งที่กด "รีเฟรช" มือ
+  let pendingFocusRequestId = new URLSearchParams(location.search).get('focusRequestId') || null;
+  let pendingAutoAction = new URLSearchParams(location.search).get('autoAction') || null;
   let optionsData = { requesters: [], sites: [], materials: [], sources: [] };
   let driversData = []; // แต่ละตัวเป็น {label, exclude, note} - exclude ใช้เทียบกับวัสดุของคำขอเพื่อเตือน ⚠️
   let assigningRequestId = null;
@@ -1335,6 +1344,7 @@
         const canUpdateSite = r.status.indexOf('ยกเลิก') === -1;
         const card = document.createElement('div');
         card.className = 'request-card';
+        card.id = 'req-card-' + r.requestId;
         card.innerHTML = `
           <div class="request-card-header">
             <span class="status-badge status-${statusClass(r.status)}">${r.status}</span>
@@ -1376,6 +1386,28 @@
         }
         container.appendChild(card);
       });
+
+      // กระโดดตรงไปคำขอใบที่ระบุ ถ้ามาจากลิงก์ปุ่ม "แก้ไข"/"ยกเลิก" ในการ์ดรายละเอียดบนแชท LINE (2026-07-18)
+      // ใช้ครั้งเดียวแล้วเคลียร์ทิ้ง กันไม่ให้กระโดด/เด้ง confirm() ซ้ำถ้าผู้ใช้กด "รีเฟรช" เองในหน้านี้ทีหลัง
+      if (pendingFocusRequestId) {
+        const focusId = pendingFocusRequestId;
+        const autoAction = pendingAutoAction;
+        pendingFocusRequestId = null;
+        pendingAutoAction = null;
+
+        const targetRequest = result.requests.find(r => r.requestId === focusId);
+        const targetCard = document.getElementById('req-card-' + focusId);
+        if (targetRequest && autoAction === 'edit' && targetRequest.status === 'รอจัดคิว') {
+          startEdit(targetRequest); // แก้ไขได้ -> เปิดฟอร์มแก้ไขให้เลยตรงๆ ไม่ต้องหาการ์ดเอง
+        } else if (targetCard) {
+          targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          targetCard.classList.add('focused-card');
+          setTimeout(() => targetCard.classList.remove('focused-card'), 3000);
+          if (targetRequest && autoAction === 'cancel' && targetRequest.status === 'รอจัดคิว') {
+            doCancel(focusId); // doCancel มี confirm() บังคับอยู่แล้ว ไม่ยกเลิกทันทีโดยไม่ถาม
+          }
+        }
+      }
     } catch (err) {
       container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + friendlyErrorMessage(err) + '</p>';
     }
