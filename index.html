@@ -22,6 +22,29 @@
     --warn: #b8860b;
   }
   * { box-sizing: border-box; }
+  /* Overlay กันไม่ให้เห็นแท็บ "ส่งคำขอใหม่" (ค่าเริ่มต้นตามมาร์กอัปสถิต) แว้บก่อนสลับไปแท็บที่ deep-link ขอจริง (2026-07-18)
+     แสดงตั้งแต่แรกด้วย CSS ล้วน (ไม่ต้องรอ JS) แล้ว JS จะซ่อนออกเองตอนพร้อม - ดูสคริปต์ hideLoadingOverlay() */
+  #loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+  #loading-overlay .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  #loading-overlay p { color: var(--text-muted); font-size: 14px; margin: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   body {
     margin: 0;
     font-family: "Segoe UI", "Sarabun", -apple-system, sans-serif;
@@ -503,6 +526,11 @@
 </head>
 <body>
 
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <p id="loading-overlay-text">กำลังโหลด...</p>
+</div>
+
 <header>
   <h1>ขอเบิกวัสดุ / ขอใช้รถ</h1>
 </header>
@@ -853,6 +881,21 @@
   // ใช้ครั้งเดียวตอนโหลดครั้งแรกจาก URL param แล้วเคลียร์ทิ้ง กันไม่ให้กระโดด/เด้ง confirm() ซ้ำทุกครั้งที่กด "รีเฟรช" มือ
   let pendingFocusRequestId = new URLSearchParams(location.search).get('focusRequestId') || null;
   let pendingAutoAction = new URLSearchParams(location.search).get('autoAction') || null;
+
+  // ซ่อน overlay "กำลังโหลด..." (ดูสไตล์ #loading-overlay) - เรียกตอนพร้อมแสดงแท็บ/ข้อมูลจริงแล้วเท่านั้น กันคนสับสนว่าทำไมเห็นแท็บ "ส่งคำขอใหม่" แว้บก่อน (2026-07-18)
+  function hideLoadingOverlay() {
+    const el = document.getElementById('loading-overlay');
+    if (el) el.style.display = 'none';
+  }
+
+  // ถ้าเปิดแอปแบบปกติ (ไม่มี ?tab= มาจาก deep-link) ไม่ต้องรอ async ใดๆ เลย ซ่อน overlay ทันทีตั้งแต่บรรทัดแรกที่ script รัน
+  // เคสมี ?tab= (กดจาก Rich Menu/การ์ด Flex) จะปล่อยให้ overlay ค้างไว้ก่อน แล้วให้ initLiff()/loadMyRequests() ด้านล่างเป็นคนซ่อนเองตอนพร้อมจริง
+  if (!new URLSearchParams(location.search).get('tab')) {
+    hideLoadingOverlay();
+  } else if (pendingFocusRequestId) {
+    document.getElementById('loading-overlay-text').textContent = 'กำลังเปิดคำขอของคุณ...';
+  }
+
   let optionsData = { requesters: [], sites: [], materials: [], sources: [] };
   let driversData = []; // แต่ละตัวเป็น {label, exclude, note} - exclude ใช้เทียบกับวัสดุของคำขอเพื่อเตือน ⚠️
   let assigningRequestId = null;
@@ -912,22 +955,34 @@
       const reqInput = document.getElementById('requester-input');
       if (!reqInput.value) reqInput.value = lineProfile.displayName;
 
-      await Promise.all([
-        checkDispatcherAndSetup(), // เผยแท็บ "จัดคิว" ถ้า LINE User ID นี้อยู่ในลิสต์ฝ่ายจัดคิว
-        checkDriverAndSetup()      // เผยแท็บ "บันทึกการวิ่ง" ถ้า LINE User ID นี้ลงทะเบียนเป็นคนขับไว้แล้ว
-      ]);
-
-      // รองรับ deep-link เปิดแท็บที่กำหนดโดยตรง เช่น ปุ่ม Rich Menu "บันทึกการวิ่ง"
-      // ที่ลิงก์เป็น https://liff.line.me/{LIFF_ID}?tab=driver-log-view
-      // (ต้องรอเช็คสิทธิ์ด้านบนเสร็จก่อน เพราะแท็บที่ต้องการอาจยังถูกซ่อนอยู่)
+      // รองรับ deep-link เปิดแท็บที่กำหนดโดยตรง เช่น ปุ่ม Rich Menu "บันทึกการวิ่ง" หรือปุ่ม "แก้ไข/ยกเลิก" ในการ์ดรายละเอียดบนแชท
+      // ที่ลิงก์เป็น https://liff.line.me/{LIFF_ID}?tab=my-requests-view&focusRequestId=...
       const requestedTab = new URLSearchParams(location.search).get('tab');
-      if (requestedTab) {
-        const targetBtn = document.querySelector(`.tab-btn[data-tab="${requestedTab}"]`);
-        if (targetBtn && targetBtn.style.display !== 'none') targetBtn.click();
+
+      // แท็บ "คำขอของฉัน" เปิดได้เสมอ ไม่ต้องรอเช็คสิทธิ์จัดคิว/คนขับก่อนเหมือนแท็บอื่น (สิทธิ์พวกนั้นแค่ใช้เผย/ซ่อนแท็บอื่น ไม่เกี่ยวกับแท็บนี้)
+      // สลับแท็บทันทีโดยไม่รอ เพื่อลดเวลาที่ช่างคุมงานเห็นจอ "กำลังโหลด..." ค้างจากการกดปุ่มแก้ไข/ยกเลิกในแชท (2026-07-18)
+      // - checkDispatcherAndSetup/checkDriverAndSetup ยังรันอยู่เบื้องหลัง (ไม่ await) เผื่อคนนี้บังเอิญเป็นฝ่ายจัดคิว/คนขับด้วย จะได้เห็นแท็บอื่นโผล่ตามปกติ
+      // - overlay "กำลังโหลด..." จะถูกซ่อนเองใน loadMyRequests() (ทั้งตอนสำเร็จและ error) ไม่ใช่ตรงนี้
+      if (requestedTab === 'my-requests-view') {
+        checkDispatcherAndSetup();
+        checkDriverAndSetup();
+        document.querySelector('[data-tab="my-requests-view"]').click();
+      } else {
+        await Promise.all([
+          checkDispatcherAndSetup(), // เผยแท็บ "จัดคิว" ถ้า LINE User ID นี้อยู่ในลิสต์ฝ่ายจัดคิว
+          checkDriverAndSetup()      // เผยแท็บ "บันทึกการวิ่ง" ถ้า LINE User ID นี้ลงทะเบียนเป็นคนขับไว้แล้ว
+        ]);
+        // แท็บอื่นนอกจากนี้ (จัดคิว/บันทึกการวิ่ง/ประวัติการวิ่ง) ถูกซ่อนตามสิทธิ์ จึงต้องรอเช็คสิทธิ์เสร็จก่อนค่อยกดแทนได้
+        if (requestedTab) {
+          const targetBtn = document.querySelector(`.tab-btn[data-tab="${requestedTab}"]`);
+          if (targetBtn && targetBtn.style.display !== 'none') targetBtn.click();
+        }
+        hideLoadingOverlay();
       }
     } catch (err) {
       document.getElementById('profile-bar').innerHTML =
         '<span style="color:#d64545">โหลดโปรไฟล์ LINE ไม่สำเร็จ (เปิดนอกแอป LINE หรือยังไม่ได้ตั้งค่า LIFF_ID)</span>';
+      hideLoadingOverlay(); // กันจอ "กำลังโหลด..." ค้างตลอดกาลถ้า liff.init/getProfile พังกลางทาง
     }
   }
 
@@ -1326,6 +1381,7 @@
 
     if (!lineProfile) {
       container.innerHTML = '<p class="hint">ไม่พบข้อมูลผู้ใช้ LINE กรุณาเปิดผ่านแอป LINE</p>';
+      hideLoadingOverlay();
       return;
     }
     try {
@@ -1335,6 +1391,7 @@
 
       if (result.requests.length === 0) {
         container.innerHTML = '<p class="hint">คุณยังไม่มีคำขอ</p>';
+        hideLoadingOverlay();
         return;
       }
 
@@ -1408,8 +1465,10 @@
           }
         }
       }
+      hideLoadingOverlay(); // ทำหลังจัดการ focus/autoAction เสร็จแล้วเท่านั้น กันเห็นลิสต์รวมแว้บก่อนกระโดดไปการ์ด/ฟอร์มที่ถูกต้อง
     } catch (err) {
       container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + friendlyErrorMessage(err) + '</p>';
+      hideLoadingOverlay();
     }
   }
 
