@@ -180,8 +180,6 @@
   }
   #profile-bar .profile-row { display: flex; align-items: center; gap: 10px; }
   #profile-bar img { width: 28px; height: 28px; border-radius: 50%; }
-  #profile-bar .userid-row { font-size: 11px; color: var(--text-muted); }
-  #profile-bar .userid-row span { user-select: all; word-break: break-all; }
 
   .view { display: none; }
   .view.active { display: block; }
@@ -950,7 +948,6 @@
           <img src="${lineProfile.pictureUrl || ''}" onerror="this.style.display='none'">
           <span>เข้าสู่ระบบเป็น: <strong>${lineProfile.displayName}</strong></span>
         </div>
-        <div class="userid-row">LINE User ID (ใช้ตั้งค่าทดสอบแจ้งเตือน): <span>${lineProfile.userId}</span></div>
       `;
       const reqInput = document.getElementById('requester-input');
       if (!reqInput.value) reqInput.value = lineProfile.displayName;
