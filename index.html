@@ -1961,15 +1961,20 @@
       const card = document.createElement('div');
       card.className = 'summary-group-card';
       if (g.isContinuing) card.style.cssText = 'border-color:#e0a530;background:#fff9ec;';
-      const dayLabel = g.dayInfo ? ` <span class="hint">(${g.dayInfo.dayNumber}/${g.dayInfo.totalDays}, เหลือ ${g.dayInfo.remainingDays} วัน)</span>` : '';
       const reconfirmNote = g.isContinuing
         ? `<div class="hint" style="color:#a1671b;margin-top:4px;">⚠️ งานต่อเนื่องจากวันก่อน — ทบทวนทีมงานวันนี้อีกครั้ง (คนขับหยุด/รถเสียหรือเปล่า) แก้ไขได้ที่แท็บ "รายการคำขอ" &gt; "จัดคิวแล้ว" &gt; "แก้ไขการจัดคิว"</div>`
         : '';
-      // comma คั่นบรรทัดเดียว โชว์แค่ทะเบียน ไม่โชว์ชื่อคนขับ (เหมือน buildDailySummaryText_ ฝั่งเซิร์ฟเวอร์ - ให้ตรงกับข้อความจริงที่จะส่ง)
-      const truckListHtml = g.trucks.map(t => escapeHtml(extractPlate(t))).join(', ');
+      // ซ้อน 2 ชั้น (2026-07-23): ชื่อหน้างานครั้งเดียว รวมจำนวนคันทุกวัสดุ แล้วซ้อนแต่ละวัสดุ (พร้อม dayLabel ของตัวเอง) ไว้ข้างใต้
+      // ต้อง sync กับ buildDailySummaryText_/buildSummaryPreviewText - comma คั่นบรรทัดเดียว โชว์แค่ทะเบียน ไม่โชว์ชื่อคนขับ ให้ตรงกับข้อความจริงที่จะส่ง
+      const materialsHtml = g.materials.map(m => {
+        const mDayLabel = m.dayInfo ? ` <span class="hint">(${m.dayInfo.dayNumber}/${m.dayInfo.totalDays}, เหลือ ${m.dayInfo.remainingDays} วัน)</span>` : '';
+        const truckListHtml = m.trucks.map(t => escapeHtml(extractPlate(t))).join(', ');
+        const materialLine = m.material ? `<div>🪨 ${escapeHtml(m.material)}${mDayLabel}</div>` : '';
+        return `${materialLine}<div>🚛 ${truckListHtml}</div>`;
+      }).join('');
       card.innerHTML = `
-        <div class="summary-group-title">🚧 ${escapeHtml(g.site)} (${g.trucks.length} คัน)${dayLabel}</div>
-        <div>${truckListHtml}</div>
+        <div class="summary-group-title">🚧 ${escapeHtml(g.site)} (${g.totalTrucks} คัน)</div>
+        ${materialsHtml}
         ${reconfirmNote}
       `;
       container.appendChild(card);
@@ -2087,9 +2092,12 @@
     const dayBadge = getThaiDayBadge(summary.date);
     const lines = [`${dayBadge.emoji} สรุปคิวรถ วัน${dayBadge.name}ที่ ${summary.date}`, ''];
     summary.siteGroups.forEach(g => {
-      const dayLabel = g.dayInfo ? ` (${g.dayInfo.dayNumber}/${g.dayInfo.totalDays}, เหลือ ${g.dayInfo.remainingDays} วัน)` : '';
-      lines.push(`🚧 ${g.site} (${g.trucks.length} คัน)${dayLabel}`);
-      lines.push(formatTruckList(g.trucks.map(extractPlate))); // ในข้อความส่งกลุ่มคนขับ โชว์แค่ทะเบียน ไม่โชว์ชื่อคนขับ (2026-07-19)
+      lines.push(`🚧 ${g.site} (${g.totalTrucks} คัน)`);
+      g.materials.forEach(m => {
+        const mDayLabel = m.dayInfo ? ` (${m.dayInfo.dayNumber}/${m.dayInfo.totalDays}, เหลือ ${m.dayInfo.remainingDays} วัน)` : '';
+        if (m.material) lines.push(`🪨 ${m.material}${mDayLabel}`);
+        lines.push(`🚛 ${formatTruckList(m.trucks.map(extractPlate))}`); // ในข้อความส่งกลุ่มคนขับ โชว์แค่ทะเบียน ไม่โชว์ชื่อคนขับ (2026-07-19)
+      });
       lines.push('');
     });
     const manualSiteGroups = {};
