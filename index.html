@@ -645,6 +645,8 @@
 <!-- ============ แท็บ 2: คำขอของฉัน ============ -->
 <div id="my-requests-view" class="view">
   <button id="refresh-btn">รีเฟรช</button>
+  <button id="telegram-link-btn" type="button">🔗 เชื่อมต่อ Telegram (รับแจ้งเตือนส่วนตัว)</button>
+  <div id="telegram-link-result" class="hint" style="display:none;"></div>
   <div id="my-requests-list"><p class="hint">กำลังโหลด...</p></div>
 </div>
 
@@ -1477,6 +1479,30 @@
   }
 
   document.getElementById('refresh-btn').addEventListener('click', loadMyRequests);
+
+  // ปุ่ม "เชื่อมต่อ Telegram" (2026-07-22) - ขอรหัส 6 หลักใช้ครั้งเดียว (อายุ 10 นาที) มาแสดงให้ผู้ใช้เอาไปพิมพ์ใน Telegram DM กับบอทเอง
+  // ผูก LINE User ID ปัจจุบันเข้ากับ Telegram chat id หลังยืนยันรหัสถูกต้องฝั่ง Code.gs (handleTelegramWebhookEvent_)
+  document.getElementById('telegram-link-btn').addEventListener('click', () => {
+    runOnce('telegramLink', async () => {
+      const resultBox = document.getElementById('telegram-link-result');
+      resultBox.style.display = 'block';
+      resultBox.textContent = 'กำลังสร้างรหัส...';
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'getTelegramLinkCode', lineUserId: lineProfile ? lineProfile.userId : '' })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        resultBox.innerHTML = `รหัสของคุณ: <b style="font-size:1.3em;letter-spacing:2px;">${result.code}</b><br>` +
+          `เปิด Telegram แล้ว DM หาบอท <b>@sp_truckrequest_bot</b> จากนั้นพิมพ์รหัสนี้ส่งไป<br>` +
+          `(รหัสใช้ได้ครั้งเดียว หมดอายุใน ${result.expiresInMinutes} นาที)`;
+      } catch (err) {
+        resultBox.textContent = 'สร้างรหัสไม่สำเร็จ: ' + friendlyErrorMessage(err);
+      }
+    });
+  });
 
   // ---------- แท็บ "จัดคิว" (เฉพาะฝ่ายจัดคิว) ----------
   // แสดง 2 กลุ่ม: "รอจัดคิว" (จัดคิวครั้งแรก) และ "จัดคิวแล้ว" (แก้ไขคนขับ/ทะเบียนรถ หรือยกเลิกได้จากตรงนี้เลย ไม่ต้องเข้าชีต)
