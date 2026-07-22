@@ -965,8 +965,10 @@
       if (requestedTab === 'my-requests-view') {
         checkDispatcherAndSetup();
         checkDriverAndSetup();
+        checkTelegramLinkAndSetup(); // ซ่อนปุ่ม "เชื่อมต่อ Telegram" ถ้าลงทะเบียนไว้แล้ว - ไม่ต้อง await เหมือนกัน (2026-07-22)
         document.querySelector('[data-tab="my-requests-view"]').click();
       } else {
+        checkTelegramLinkAndSetup(); // ไม่ต้องรอเหมือนกัน แค่ toggle ปุ่ม ไม่กระทบการสลับแท็บ
         await Promise.all([
           checkDispatcherAndSetup(), // เผยแท็บ "จัดคิว" ถ้า LINE User ID นี้อยู่ในลิสต์ฝ่ายจัดคิว
           checkDriverAndSetup()      // เผยแท็บ "บันทึกการวิ่ง" ถ้า LINE User ID นี้ลงทะเบียนเป็นคนขับไว้แล้ว
@@ -998,6 +1000,20 @@
       }
     } catch (err) {
       console.error('เช็คสิทธิ์ฝ่ายจัดคิวไม่สำเร็จ', err);
+    }
+  }
+
+  // ซ่อนปุ่ม "เชื่อมต่อ Telegram" ถ้า LINE User ID นี้เคยลงทะเบียนไว้แล้ว (2026-07-22) - กันคนกดซ้ำโดยไม่จำเป็น/สับสนว่าต้องเชื่อมอีกไหม
+  async function checkTelegramLinkAndSetup() {
+    if (!lineProfile) return;
+    try {
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=checkTelegramLink&userId=' + encodeURIComponent(lineProfile.userId));
+      const result = await res.json();
+      if (result.status === 'ok' && result.linked) {
+        document.getElementById('telegram-link-btn').style.display = 'none';
+      }
+    } catch (err) {
+      console.error('เช็คสถานะเชื่อมต่อ Telegram ไม่สำเร็จ', err); // เงียบๆ พอ - ไม่ใช่ฟีเจอร์หลัก ปุ่มโผล่ค้างไว้ไม่กระทบการใช้งานอื่น
     }
   }
 
