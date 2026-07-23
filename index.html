@@ -261,16 +261,30 @@
     background: var(--primary);
     color: white;
     border: none;
-    padding: 16px;
-    border-radius: 12px;
-    font-size: 17px;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 15px;
     font-weight: 700;
     cursor: pointer;
-    margin-top: 12px;
-    box-shadow: 0 2px 6px rgba(6, 199, 85, 0.35);
+    margin-top: 10px;
   }
-  #driver-log-submit-btn:active { background: var(--primary-dark); box-shadow: none; }
-  #driver-log-submit-btn:disabled { opacity: 0.6; box-shadow: none; }
+  #driver-log-submit-btn:active { background: var(--primary-dark); }
+  #driver-log-submit-btn:disabled { opacity: 0.6; }
+
+  .refresh-btn {
+    display: block;
+    width: 100%;
+    background: white;
+    color: var(--primary-dark);
+    border: 1px solid var(--primary);
+    padding: 10px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 10px;
+  }
+  .refresh-btn:active { background: #e6f9ee; }
 
   #cancel-edit-btn {
     background: transparent;
@@ -663,7 +677,7 @@
 
 <!-- ============ แท็บ 2: คำขอของฉัน ============ -->
 <div id="my-requests-view" class="view">
-  <button id="refresh-btn">รีเฟรช</button>
+  <button id="refresh-btn" class="refresh-btn">รีเฟรช</button>
   <button id="telegram-link-btn" type="button" style="display:none;">🔗 เชื่อมต่อ Telegram (รับแจ้งเตือนส่วนตัว)</button>
   <div id="telegram-link-result" class="hint" style="display:none;"></div>
   <div id="my-requests-list"><p class="hint">กำลังโหลด...</p></div>
@@ -677,7 +691,7 @@
   </div>
 
   <div id="dispatch-requests-panel">
-    <button id="dispatch-refresh-btn">รีเฟรช</button>
+    <button id="dispatch-refresh-btn" class="refresh-btn">รีเฟรช</button>
     <div id="dispatch-list"><p class="hint">กำลังโหลด...</p></div>
   </div>
 
@@ -714,7 +728,7 @@
     </div>
     <div class="hint" style="margin-top:2px;">ลืมบันทึกวันก่อนๆ เลือกย้อนหลังเพื่อดูรายการงานของวันนั้นได้</div>
   </div>
-  <button type="button" id="driver-log-refresh-btn">รีเฟรช</button>
+  <button type="button" id="driver-log-refresh-btn" class="refresh-btn">รีเฟรช</button>
   <div id="driver-log-job-list"><p class="hint">กำลังโหลด...</p></div>
 
   <div id="driver-log-form" style="display:none;">
@@ -789,7 +803,7 @@
       </div>
     </div>
   </div>
-  <button type="button" id="trip-history-refresh-btn">รีเฟรช</button>
+  <button type="button" id="trip-history-refresh-btn" class="refresh-btn">รีเฟรช</button>
   <div id="trip-history-list"><p class="hint">กำลังโหลด...</p></div>
 
   <div id="trip-history-form" style="display:none;">
