@@ -370,6 +370,7 @@
   }
   .btn-small.edit-btn { color: var(--primary-dark); border-color: var(--primary); }
   .btn-small.cancel-btn { color: var(--error); border-color: var(--error); }
+  .btn-small.complete-btn { color: #27ae60; border-color: #27ae60; }
 
   .site-status-section {
     margin-top: 10px;
@@ -1586,10 +1587,12 @@
       ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
       <div class="card-actions">
         <button class="btn-small edit-btn assign-btn">แก้ไขการจัดคิว</button>
+        <button class="btn-small complete-btn dispatch-complete-btn">✅ ปิดงาน (ส่งครบ)</button>
         <button class="btn-small cancel-btn dispatch-cancel-btn">ยกเลิกคำขอนี้</button>
       </div>
     `;
     card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material, r.assigned, r.startDate, r.site));
+    card.querySelector('.dispatch-complete-btn').addEventListener('click', () => doDispatchComplete(r.requestId));
     card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
     return card;
   }
@@ -1812,6 +1815,25 @@
         loadPendingRequests();
       } catch (err) {
         alert('ยกเลิกไม่สำเร็จ: ' + friendlyErrorMessage(err));
+      }
+    });
+  }
+
+  // ฝ่ายจัดคิวกดปิดงานแทนช่าง (2026-07-23) - เผื่อกรณีช่างผู้ขอไม่ได้กดแจ้ง "เสร็จแล้ว" เอง ทำให้คำขอค้างอยู่ในลิสต์นี้ไม่รู้จบ
+  function doDispatchComplete(requestId) {
+    if (!confirm('ยืนยันปิดงานนี้ (ส่งครบแล้ว)? ระบบจะถือว่างานนี้จบ ไม่ต้องใช้รถอีก และแจ้งช่างที่ขอไว้ทันที')) return;
+    runOnce('dispatchComplete:' + requestId, async () => {
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'dispatcherCompleteRequest', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        loadPendingRequests();
+      } catch (err) {
+        alert('ปิดงานไม่สำเร็จ: ' + friendlyErrorMessage(err));
       }
     });
   }
