@@ -1576,6 +1576,15 @@
         container.appendChild(heading);
         queued.forEach(r => container.appendChild(buildQueuedCard(r)));
       }
+
+      // เพิ่งปิดงาน (2026-07-23) - เผื่อกดปิดงานผิดคำขอ กดเปิดกลับได้จากตรงนี้เลย ไม่ต้องเข้าชีต
+      if (result.recentlyCompleted && result.recentlyCompleted.length > 0) {
+        const heading = document.createElement('div');
+        heading.style.cssText = 'font-weight:700;margin:20px 0 8px;font-size:14px;color:#666;';
+        heading.textContent = `เพิ่งปิดงาน (กดผิดกดเปิดกลับได้)`;
+        container.appendChild(heading);
+        result.recentlyCompleted.forEach(r => container.appendChild(buildRecentlyCompletedCard(r)));
+      }
     } catch (err) {
       container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + friendlyErrorMessage(err) + '</p>';
     }
@@ -1624,8 +1633,28 @@
       </div>
     `;
     card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material, r.assigned, r.startDate, r.site));
-    card.querySelector('.dispatch-complete-btn').addEventListener('click', () => doDispatchComplete(r.requestId));
+    card.querySelector('.dispatch-complete-btn').addEventListener('click', () => doDispatchComplete(r.requestId, r.site));
     card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
+    return card;
+  }
+
+  // เพิ่งปิดงาน (2026-07-23) - การ์ดขนาดเล็ก แสดงแค่พอเทียบได้ว่าใช่คำขอที่ตั้งใจปิดจริงไหม ก่อนกดเปิดกลับ
+  function buildRecentlyCompletedCard(r) {
+    const card = document.createElement('div');
+    card.className = 'request-card';
+    card.style.opacity = '0.85';
+    card.innerHTML = `
+      <div class="request-card-header">
+        <span class="status-badge status-done">ปิดงานแล้ว</span>
+        <span class="hint">${escapeHtml(r.updatedAt || '')}</span>
+      </div>
+      <div><strong>${escapeHtml(r.site)}</strong></div>
+      <div>${formatMaterialLine(r.material, r.quantity, r.unit)}</div>
+      <div class="card-actions">
+        <button class="btn-small edit-btn dispatch-reopen-btn">↩️ เปิดงานกลับ (กดผิด)</button>
+      </div>
+    `;
+    card.querySelector('.dispatch-reopen-btn').addEventListener('click', () => doDispatchReopen(r.requestId, r.site));
     return card;
   }
 
@@ -1852,8 +1881,9 @@
   }
 
   // ฝ่ายจัดคิวกดปิดงานแทนช่าง (2026-07-23) - เผื่อกรณีช่างผู้ขอไม่ได้กดแจ้ง "เสร็จแล้ว" เอง ทำให้คำขอค้างอยู่ในลิสต์นี้ไม่รู้จบ
-  function doDispatchComplete(requestId) {
-    if (!confirm('ยืนยันปิดงานนี้ (ส่งครบแล้ว)? ระบบจะถือว่างานนี้จบ ไม่ต้องใช้รถอีก และแจ้งช่างที่ขอไว้ทันที')) return;
+  // ใส่ชื่อหน้างานไว้ใน confirm() ด้วย (ไม่ใช่แค่ "ยืนยันปิดงานนี้?" เฉยๆ) กันกดผิดคำขอตอนการ์ดเรียงติดกันหลายใบ (2026-07-23)
+  function doDispatchComplete(requestId, site) {
+    if (!confirm(`ยืนยันปิดงาน "${site || ''}" (ส่งครบแล้ว)?\nระบบจะถือว่างานนี้จบ ไม่ต้องใช้รถอีก และแจ้งช่างที่ขอไว้ทันที\n\n(ถ้ากดผิด กดเปิดกลับได้ที่หัวข้อ "เพิ่งปิดงาน" ด้านล่างรายการ)`)) return;
     runOnce('dispatchComplete:' + requestId, async () => {
       try {
         const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
@@ -1866,6 +1896,25 @@
         loadPendingRequests();
       } catch (err) {
         alert('ปิดงานไม่สำเร็จ: ' + friendlyErrorMessage(err));
+      }
+    });
+  }
+
+  // เปิดงานกลับ (2026-07-23) - แก้กรณีกดปิดงานผิดคำขอ ดึงกลับมาเป็น "กำลังส่ง" ให้กลับไปโผล่ในรายการจัดคิวตามปกติ
+  function doDispatchReopen(requestId, site) {
+    if (!confirm(`ยืนยันเปิดงาน "${site || ''}" กลับ? คำขอนี้จะกลับไปอยู่ในรายการจัดคิวตามปกติ`)) return;
+    runOnce('dispatchReopen:' + requestId, async () => {
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'dispatcherReopenRequest', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        loadPendingRequests();
+      } catch (err) {
+        alert('เปิดงานกลับไม่สำเร็จ: ' + friendlyErrorMessage(err));
       }
     });
   }
