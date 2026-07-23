@@ -403,6 +403,7 @@
   .btn-small.cancel-btn { color: var(--error); border-color: var(--error); }
   .btn-small.complete-btn { color: #27ae60; border-color: #27ae60; }
   .btn-small.assign-btn { color: #b8860b; border-color: #d4a017; }
+  .btn-small.reopen-btn { color: #666; border-color: #999; }
 
   .site-status-section {
     margin-top: 10px;
@@ -1581,7 +1582,7 @@
       if (result.recentlyCompleted && result.recentlyCompleted.length > 0) {
         const heading = document.createElement('div');
         heading.style.cssText = 'font-weight:700;margin:20px 0 8px;font-size:14px;color:#666;';
-        heading.textContent = `เพิ่งปิดงาน (กดผิดกดเปิดกลับได้)`;
+        heading.textContent = `เพิ่งปิดงาน`;
         container.appendChild(heading);
         result.recentlyCompleted.forEach(r => container.appendChild(buildRecentlyCompletedCard(r)));
       }
@@ -1649,9 +1650,9 @@
         <span class="hint">${escapeHtml(r.updatedAt || '')}</span>
       </div>
       <div><strong>${escapeHtml(r.site)}</strong></div>
-      <div>${formatMaterialLine(r.material, r.quantity, r.unit)}</div>
+      <div class="hint">${formatMaterialLine(r.material, r.quantity, r.unit)}</div>
       <div class="card-actions">
-        <button class="btn-small edit-btn dispatch-reopen-btn">↩️ เปิดงานกลับ (กดผิด)</button>
+        <button class="btn-small reopen-btn dispatch-reopen-btn">↩️ เปิดงานกลับ</button>
       </div>
     `;
     card.querySelector('.dispatch-reopen-btn').addEventListener('click', () => doDispatchReopen(r.requestId, r.site));
