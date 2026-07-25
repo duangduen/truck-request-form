@@ -2260,7 +2260,9 @@
       lines.push('');
     });
     const manualSiteGroups = {};
-    const icons = { 'หยุด': '⏸', 'จอด': '🅿️', 'ซ่อม/เช็คซ่อม': '🔧', 'วิ่งหินทรายเข้าแพล้นท์': '🏭', 'ยังไม่ระบุสถานะ': '❔' };
+    const icons = { 'หยุด': '⏸', 'จอด': '🅿️', 'ซ่อม/เช็คซ่อม': '🔧', 'ยังไม่ระบุสถานะ': '❔' };
+    const plantRunItems = [];
+    const rubberPlantItems = []; // "แพล้นท์ยาง" (2026-07-23) - แยกหมวดเหมือน "วิ่งวัสดุเข้าแพล้นท์ TRC"
     const otherStatusItems = [];
     summary.remaining.forEach(r => {
       const plateOnly = extractPlate(r.displayLabel || r.label); // ในข้อความส่งกลุ่มคนขับ โชว์แค่ทะเบียน ไม่โชว์ชื่อคนขับ (2026-07-19)
@@ -2268,6 +2270,10 @@
         const site = r.note || 'ไปหน้างาน (ยังไม่ระบุชื่อหน้างานในหมายเหตุ)';
         if (!manualSiteGroups[site]) manualSiteGroups[site] = [];
         manualSiteGroups[site].push(plateOnly);
+      } else if (r.status === 'วิ่งวัสดุเข้าแพล้นท์ TRC') {
+        plantRunItems.push(`${plateOnly}${r.note ? ` (${r.note})` : ''}`);
+      } else if (r.status === 'แพล้นท์ยาง') {
+        rubberPlantItems.push(`${plateOnly}${r.note ? ` (${r.note})` : ''}`);
       } else {
         const key = r.status || 'ยังไม่ระบุสถานะ';
         const icon = icons[key] || '•';
@@ -2279,6 +2285,16 @@
       lines.push(formatTruckList(manualSiteGroups[site]));
       lines.push('');
     });
+    if (plantRunItems.length > 0) {
+      lines.push(`🏭 วิ่งวัสดุเข้าแพล้นท์ TRC (${plantRunItems.length} คัน)`);
+      lines.push(formatTruckList(plantRunItems));
+      lines.push('');
+    }
+    if (rubberPlantItems.length > 0) {
+      lines.push(`🛞 แพล้นท์ยาง (${rubberPlantItems.length} คัน)`);
+      lines.push(formatTruckList(rubberPlantItems));
+      lines.push('');
+    }
     if (otherStatusItems.length > 0) {
       lines.push(`📋 สถานะอื่นๆ (${otherStatusItems.length} คัน)`);
       lines.push(formatTruckList(otherStatusItems));
