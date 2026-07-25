@@ -388,10 +388,12 @@
   .status-cancelled { background: #f1f1f1; color: var(--text-muted); }
   .status-done { background: #e6f9ee; color: var(--primary-dark); }
   .status-assigned { background: #e6f9ee; color: var(--primary-dark); }
+  .status-paused { background: #eef1f5; color: #55606b; }
 
-  .card-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .btn-small {
-    flex: 1;
+    flex: 1 1 45%;
+    min-width: 120px;
     padding: 8px;
     border-radius: 8px;
     border: 1px solid var(--border);
@@ -404,6 +406,8 @@
   .btn-small.complete-btn { color: #27ae60; border-color: #27ae60; }
   .btn-small.assign-btn { color: #b8860b; border-color: #d4a017; }
   .btn-small.reopen-btn { color: #666; border-color: #999; }
+  .btn-small.pause-btn { color: #a1671b; border-color: #d4a017; }
+  .btn-small.resume-btn { color: #1565c0; border-color: #1565c0; }
 
   .site-status-section {
     margin-top: 10px;
@@ -1617,11 +1621,16 @@
   function buildQueuedCard(r) {
     const card = document.createElement('div');
     card.className = 'request-card';
+    const isPaused = r.progressStatus === 'พักส่งชั่วคราว'; // 2026-07-23
+    const pauseResumeBtn = isPaused
+      ? `<button class="btn-small resume-btn dispatch-resume-btn">▶️ ส่งต่อ</button>`
+      : `<button class="btn-small pause-btn dispatch-pause-btn">⏸️ หยุดส่ง</button>`;
     card.innerHTML = `
       <div class="request-card-header">
         <span class="status-badge status-assigned">จัดคิวแล้ว</span>
         <span class="hint">${escapeHtml(r.requestedAt)}</span>
       </div>
+      ${isPaused ? `<div style="margin-bottom:6px;"><span class="status-badge status-paused">⏸️ พักส่งชั่วคราว</span></div>` : ''}
       <div><strong>${escapeHtml(r.site)}</strong> — ผู้ขอ: ${escapeHtml(r.requester)}</div>
       <div>${formatMaterialLine(r.material, r.quantity, r.unit)} — วันเริ่มงาน ${escapeHtml(r.startDate)}</div>
       <div class="hint">🚚 แจกงาน: ${escapeHtml(r.assigned || '-')}</div>
@@ -1629,6 +1638,7 @@
       ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
       <div class="card-actions">
         <button class="btn-small edit-btn assign-btn">แก้ไขการจัดคิว</button>
+        ${pauseResumeBtn}
         <button class="btn-small complete-btn dispatch-complete-btn">✅ ปิดงาน</button>
         <button class="btn-small cancel-btn dispatch-cancel-btn">ยกเลิกคำขอนี้</button>
       </div>
@@ -1636,6 +1646,11 @@
     card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material, r.assigned, r.startDate, r.site));
     card.querySelector('.dispatch-complete-btn').addEventListener('click', () => doDispatchComplete(r.requestId, r.site));
     card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
+    if (isPaused) {
+      card.querySelector('.dispatch-resume-btn').addEventListener('click', () => doDispatchResume(r.requestId, r.site));
+    } else {
+      card.querySelector('.dispatch-pause-btn').addEventListener('click', () => doDispatchPause(r.requestId, r.site));
+    }
     return card;
   }
 
@@ -1916,6 +1931,46 @@
         loadPendingRequests();
       } catch (err) {
         alert('เปิดงานกลับไม่สำเร็จ: ' + friendlyErrorMessage(err));
+      }
+    });
+  }
+
+  // หยุดส่งชั่วคราว (2026-07-23) - ต่างจาก "ปิดงาน": งานนี้ยังไม่จบ แค่หยุดพักไม่ต้องจัดรถให้วันนี้ (พขร หยุด/ไม่มีรถ/เคลียร์หน้างาน)
+  // เหตุผลไม่บังคับกรอก (prompt คืนค่า null เฉพาะตอนกด Cancel เท่านั้น ถ้าเว้นว่างแล้วกด OK จะได้ "" ไม่ใช่ null - ยังดำเนินการต่อได้)
+  function doDispatchPause(requestId, site) {
+    const note = prompt(`หยุดส่ง "${site || ''}" ชั่วคราว - ระบุเหตุผลได้ (ไม่บังคับ เว้นว่างแล้วกด OK ได้เลย):`, '');
+    if (note === null) return; // กด Cancel
+    runOnce('dispatchPause:' + requestId, async () => {
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'dispatcherPauseRequest', requestId, note, lineUserId: lineProfile ? lineProfile.userId : '' })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        loadPendingRequests();
+      } catch (err) {
+        alert('หยุดส่งไม่สำเร็จ: ' + friendlyErrorMessage(err));
+      }
+    });
+  }
+
+  // ส่งต่อ (2026-07-23) - ยกเลิกการพักส่งชั่วคราว กลับไปโผล่ในสรุปคิวรถ/ตารางงานคนขับตามปกติ
+  function doDispatchResume(requestId, site) {
+    if (!confirm(`ยืนยันส่งต่องาน "${site || ''}"? จะกลับไปโผล่ในสรุปคิวรถ/ตารางงานคนขับตามปกติ`)) return;
+    runOnce('dispatchResume:' + requestId, async () => {
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'dispatcherResumeRequest', requestId, lineUserId: lineProfile ? lineProfile.userId : '' })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        loadPendingRequests();
+      } catch (err) {
+        alert('ส่งต่อไม่สำเร็จ: ' + friendlyErrorMessage(err));
       }
     });
   }
