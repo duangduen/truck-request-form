@@ -1676,7 +1676,7 @@
   }
 
   // existingAssigned: ถ้ามีค่า แปลว่าเป็นการ "แก้ไขการจัดคิว" ของงานที่จัดไปแล้ว - เอามาติ๊กพรีฟิลให้เลย
-  function openAssignModal(requestId, truckCount, material, existingAssigned, startDate, site) {
+  async function openAssignModal(requestId, truckCount, material, existingAssigned, startDate, site) {
     assigningRequestId = requestId;
     selectedDriverLabels = new Set();
     assignCustomEntries = [];
@@ -1694,6 +1694,16 @@
     document.getElementById('assign-confirm-label').textContent =
       isEdit ? 'บันทึกการแก้ไข' : 'ยืนยันจัดคิว';
 
+    document.getElementById('assign-modal-overlay').classList.add('active');
+
+    // เผื่อ loadDrivers() ตอนโหลดหน้าแรกพลาด/ช้าไม่ทัน (2026-07-23 แก้บั๊ค: เปิด modal แล้วลิสต์รถว่างเปล่า ทั้งที่ยังไม่ได้พิมพ์ค้นหาอะไรเลย
+    // เดิม renderAssignCheckboxList('') เรียกทันทีโดยไม่เช็คว่า driversData มีข้อมูลจริงไหม ถ้าว่างจะขึ้น "ไม่พบรายชื่อที่ตรงกับคำค้นหา" ทำให้เข้าใจผิดว่าค้นหาไม่เจอ)
+    // ลองโหลดซ้ำอีกครั้งเฉพาะตอนที่ยังไม่มีข้อมูลเลยเท่านั้น ไม่โหลดซ้ำทุกครั้งที่เปิด modal กันหน่วง
+    if (driversData.length === 0) {
+      document.getElementById('assign-checkbox-list').innerHTML = '<p class="hint" style="padding:10px;">กำลังโหลดรายชื่อรถ...</p>';
+      await loadDrivers();
+    }
+
     if (isEdit) {
       // เทียบด้วยทะเบียนรถ (ไม่ใช่ label ทั้งสตริง) เพราะงานที่จัดคิวไว้ก่อนเปลี่ยนรูปแบบ label (2026-07-19)
       // อาจยังเก็บ "ชื่อ - ทะเบียน" แบบเก่าอยู่ - ถ้าเจอให้ใช้ label ปัจจุบัน (รูปแบบใหม่) แทน ไม่ใช่ข้อความเก่าที่ค้างอยู่
@@ -1705,10 +1715,12 @@
       });
     }
 
+    // เช็คซ้ำว่า modal ยังเปิดอยู่ที่คำขอเดิมไหม (เผื่อผู้ใช้ปิด modal นี้ไปเปิดของคำขออื่นระหว่างรอ loadDrivers)
+    if (assigningRequestId !== requestId) return;
+
     renderAssignCheckboxList('');
     renderAssignCustomList();
     updateAssignSelectedCount();
-    document.getElementById('assign-modal-overlay').classList.add('active');
 
     // โหลดรายชื่อรถที่ถูกจัดคิวไปหน้างานอื่นแล้วในวันเดียวกัน (เพื่อเตือนตอนติ๊กเลือกซ้ำ) - ไม่บล็อกการเปิด modal ระหว่างรอโหลด
     loadAssignConflicts(requestId, startDate, site);
@@ -1763,7 +1775,10 @@
 
     container.innerHTML = '';
     if (filtered.length === 0) {
-      container.innerHTML = '<p class="hint" style="padding:10px;">ไม่พบรายชื่อที่ตรงกับคำค้นหา</p>';
+      // แยกข้อความ 2 แบบ (2026-07-23) - ถ้ายังไม่มีรถให้เลือกเลยสักคัน (โหลดพลาด/ยังไม่เสร็จ) ต่างจากพิมพ์ค้นหาแล้วไม่เจอจริงๆ
+      container.innerHTML = driversData.length === 0
+        ? '<p class="hint" style="padding:10px;color:#d64545;">โหลดรายชื่อรถไม่สำเร็จ ลองปิดแล้วเปิดหน้าต่างนี้ใหม่ หรือกดรีเฟรชหน้าเว็บ</p>'
+        : '<p class="hint" style="padding:10px;">ไม่พบรายชื่อที่ตรงกับคำค้นหา</p>';
       return;
     }
 
