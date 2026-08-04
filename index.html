@@ -915,6 +915,8 @@
   });
 
   let lineProfile = null;
+  let isDispatcherUser = false; // ตั้งค่าใน checkDispatcherAndSetup - ใช้ตัดสินใจว่าจะซ่อนแท็บ "ส่งคำขอใหม่"/"คำขอของฉัน" ให้คนขับล้วนๆ หรือไม่ (2026-08-04)
+  let isDriverUser = false; // ตั้งค่าใน checkDriverAndSetup
   let editingRequestId = null;
   // รองรับ deep-link จากการ์ด Flex ในแชท LINE ("รายละเอียดคำขอ" -> ปุ่ม แก้ไข/ยกเลิก) ให้กระโดดตรงไปคำขอใบนั้นเลยแทนที่จะเปิดมาเจอลิสต์รวม (2026-07-18)
   // ใช้ครั้งเดียวตอนโหลดครั้งแรกจาก URL param แล้วเคลียร์ทิ้ง กันไม่ให้กระโดด/เด้ง confirm() ซ้ำทุกครั้งที่กด "รีเฟรช" มือ
@@ -1010,6 +1012,19 @@
           checkDispatcherAndSetup(), // เผยแท็บ "จัดคิว" ถ้า LINE User ID นี้อยู่ในลิสต์ฝ่ายจัดคิว
           checkDriverAndSetup()      // เผยแท็บ "บันทึกการวิ่ง" ถ้า LINE User ID นี้ลงทะเบียนเป็นคนขับไว้แล้ว
         ]);
+        // คนขับล้วนๆ (ไม่ใช่ฝ่ายจัดคิวด้วย) ไม่ต้องเห็นแท็บ "ส่งคำขอใหม่"/"คำขอของฉัน" - แท็บพวกนี้มีไว้สำหรับช่างคุมงานที่เบิกวัสดุ/รถเท่านั้น
+        // ไม่เกี่ยวกับงานบันทึกการวิ่งของคนขับเลย ซ่อนทิ้งแล้วสลับแท็บเริ่มต้นเป็น "บันทึกการวิ่ง" แทน (2026-08-04)
+        if (isDriverUser && !isDispatcherUser) {
+          const requestTabBtn = document.querySelector('.tab-btn[data-tab="form-view"]');
+          const myRequestsTabBtn = document.querySelector('.tab-btn[data-tab="my-requests-view"]');
+          if (requestTabBtn) requestTabBtn.style.display = 'none';
+          if (myRequestsTabBtn) myRequestsTabBtn.style.display = 'none';
+          if (!requestedTab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.tab-btn[data-tab="driver-log-view"]').click();
+          }
+        }
+
         // แท็บอื่นนอกจากนี้ (จัดคิว/บันทึกการวิ่ง/ประวัติการวิ่ง) ถูกซ่อนตามสิทธิ์ จึงต้องรอเช็คสิทธิ์เสร็จก่อนค่อยกดแทนได้
         if (requestedTab) {
           const targetBtn = document.querySelector(`.tab-btn[data-tab="${requestedTab}"]`);
@@ -1032,6 +1047,7 @@
       const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=checkDispatcher&userId=' + encodeURIComponent(lineProfile.userId));
       const result = await res.json();
       if (result.status === 'ok' && result.isDispatcher) {
+        isDispatcherUser = true;
         document.getElementById('dispatch-tab-btn').style.display = '';
         loadDrivers();
       }
@@ -2426,6 +2442,9 @@
 
   // ---------- บันทึกการวิ่ง (คนขับ) ----------
   let driverJobsData = [];
+  // เก็บผลลัพธ์ action=driverJobsForToday ที่ checkDriverAndSetup ดึงมาแล้วตอนเปิดแอพ (endpoint นี้ค่อนข้างหนัก - สแกนชีตคำขอ+นับเที่ยวสะสม)
+  // ไว้ให้ loadDriverJobs ครั้งแรกใช้ซ้ำแทนการยิงซ้ำอีกรอบ ถ้าวันที่ตรงกับวันนี้ - แก้ปัญหาหน้า "บันทึกการวิ่ง" โหลดช้าเพราะยิง 2 รอบซ้อน (2026-08-04)
+  let driverJobsCache = null;
   let selectedTripJob = null;
   let selectedTripJobIdx = -1; // เก็บ index ที่เลือกไว้ ใช้เช็คว่าแตะซ้ำการ์ดเดิมหรือเปล่า (แตะซ้ำ = ยกเลิกเลือก)
   let tripPhotoBase64 = '';
@@ -2472,8 +2491,10 @@
       const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=driverJobsForToday&userId=' + encodeURIComponent(lineProfile.userId));
       const result = await res.json();
       if (result.status === 'ok') {
+        isDriverUser = true;
         document.getElementById('driver-log-tab-btn').style.display = '';
         document.getElementById('trip-history-tab-btn').style.display = '';
+        driverJobsCache = { date: result.date, result: result }; // เก็บไว้ให้ loadDriverJobs เปิดครั้งแรกใช้ซ้ำ กันยิง action=driverJobsForToday ซ้ำ
       }
     } catch (err) {
       console.error('เช็คสิทธิ์คนขับไม่สำเร็จ', err);
@@ -2497,9 +2518,16 @@
     selectedTripJobIdx = -1;
 
     try {
-      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=driverJobsForToday&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') +
-        '&date=' + encodeURIComponent(listDate));
-      const result = await res.json();
+      let result;
+      if (driverJobsCache && driverJobsCache.date === listDate) {
+        // วันที่ตรงกับที่ checkDriverAndSetup ดึงมาแล้วตอนเปิดแอพ - ใช้ผลเดิมแทนยิงซ้ำ ใช้ได้แค่ครั้งเดียวแล้วล้างทิ้ง กันข้อมูลเก่าค้างตอนกด "รีเฟรช" ทีหลัง
+        result = driverJobsCache.result;
+        driverJobsCache = null;
+      } else {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=driverJobsForToday&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') +
+          '&date=' + encodeURIComponent(listDate));
+        result = await res.json();
+      }
       if (result.status !== 'ok') throw new Error(result.message);
 
       driverJobsData = result.jobs || [];
