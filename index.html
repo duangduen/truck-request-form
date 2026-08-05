@@ -1036,6 +1036,33 @@
     if (el) el.style.display = 'none';
   }
 
+  // จำสิทธิ์ล่าสุดไว้ใน localStorage (2026-08-05) - แก้ปัญหาคนขับเปิดแอปแล้วเห็นแท็บ "ส่งคำขอใหม่"/"คำขอของฉัน" แว้บก่อนสลับไป "บันทึกการวิ่ง"
+  // สาเหตุเดิม: การเช็คสิทธิ์จริง (checkDriverAndSetup) ต้องรอ API รอบไป-กลับซึ่งช้ากว่าการซ่อน loading overlay เสมอ ทำให้เห็นแท็บผิดแว้บนึงก่อนเสมอ
+  // แก้โดยจำผลลัพธ์ครั้งก่อนไว้ ใช้ทายล่วงหน้า(synchronous)ตั้งแต่บรรทัดแรกที่ script รัน - เปิดแอปครั้งแรกยังแว้บเหมือนเดิม (ไม่มีอะไรให้จำ)
+  // แต่ครั้งถัดๆไปจะตรงแท็บทันที ผลจริงจาก checkDriverAndSetup/checkDispatcherAndSetup ใน initLiff() ยังรันเสมอเพื่อยืนยัน/แก้ไขให้ถูกต้องอีกที เผื่อสิทธิ์เปลี่ยนไปจากครั้งก่อน
+  let cachedRole = null;
+  try { cachedRole = JSON.parse(localStorage.getItem('cachedLineRole') || 'null'); } catch (e) { cachedRole = null; }
+  function saveCachedRole() {
+    try { localStorage.setItem('cachedLineRole', JSON.stringify({ isDriverUser, isDispatcherUser })); } catch (e) { /* เพิกเฉยถ้า storage ใช้ไม่ได้ (โหมด private/เต็ม) - แค่เสียโอกาสจำ ไม่กระทบการทำงานหลัก */ }
+  }
+  // ครั้งก่อนเป็นคนขับล้วนๆ (ไม่ใช่ฝ่ายจัดคิวด้วย) - สลับหน้าตาไปแท็บ "บันทึกการวิ่ง" ทันทีตั้งแต่ก่อนวาดจอครั้งแรก (ยังไม่โหลดข้อมูลจริง แค่ซ่อน/สลับแท็บ
+  // ให้ถูกจอ) ข้อมูลจริงจะถูกโหลดตามปกติทีหลังตอน checkDriverAndSetup ยืนยันสิทธิ์เสร็จ (เรียก loadDriverJobs ผ่าน .click() เหมือนเดิมทุกประการ)
+  if (cachedRole && cachedRole.isDriverUser && !cachedRole.isDispatcherUser && !new URLSearchParams(location.search).get('tab')) {
+    const requestTabBtn = document.querySelector('.tab-btn[data-tab="form-view"]');
+    const myRequestsTabBtn = document.querySelector('.tab-btn[data-tab="my-requests-view"]');
+    const driverTabBtn = document.querySelector('.tab-btn[data-tab="driver-log-view"]');
+    if (requestTabBtn) requestTabBtn.style.display = 'none';
+    if (myRequestsTabBtn) myRequestsTabBtn.style.display = 'none';
+    if (driverTabBtn) {
+      driverTabBtn.style.display = '';
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      driverTabBtn.classList.add('active');
+    }
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    const driverViewEl = document.getElementById('driver-log-view');
+    if (driverViewEl) driverViewEl.classList.add('active');
+  }
+
   // ถ้าเปิดแอปแบบปกติ (ไม่มี ?tab= มาจาก deep-link) ไม่ต้องรอ async ใดๆ เลย ซ่อน overlay ทันทีตั้งแต่บรรทัดแรกที่ script รัน
   // เคสมี ?tab= (กดจาก Rich Menu/การ์ด Flex) จะปล่อยให้ overlay ค้างไว้ก่อน แล้วให้ initLiff()/loadMyRequests() ด้านล่างเป็นคนซ่อนเองตอนพร้อมจริง
   if (!new URLSearchParams(location.search).get('tab')) {
@@ -1119,6 +1146,7 @@
           checkDispatcherAndSetup(), // เผยแท็บ "จัดคิว" ถ้า LINE User ID นี้อยู่ในลิสต์ฝ่ายจัดคิว
           checkDriverAndSetup()      // เผยแท็บ "บันทึกการวิ่ง" ถ้า LINE User ID นี้ลงทะเบียนเป็นคนขับไว้แล้ว
         ]);
+        saveCachedRole(); // จำผลจริงไว้ใช้ทายล่วงหน้าตอนเปิดแอปครั้งถัดไป (กันแท็บผิดแว้บก่อนสลับ - ดูคอมเมนต์จุดที่ประกาศ cachedRole ด้านบน)
         // แท็บ "เลขไมล์" เห็นได้ทั้งคนขับ (รายงานเอง) และฝ่ายจัดคิว (ดูสรุปรวม) - ฝั่งในแท็บจะโชว์เฉพาะส่วนที่ตรงสิทธิ์ให้เอง (2026-08-05)
         if (isDriverUser || isDispatcherUser) {
           document.getElementById('odometer-tab-btn').style.display = '';
@@ -1134,6 +1162,18 @@
           if (!requestedTab) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelector('.tab-btn[data-tab="driver-log-view"]').click();
+          }
+        } else if (cachedRole && cachedRole.isDriverUser && !cachedRole.isDispatcherUser) {
+          // ทายไว้ผิด (cachedRole ทายว่าเป็นคนขับล้วนๆ แต่สิทธิ์จริงตอนนี้ไม่ใช่แล้ว เช่นกลายเป็นฝ่ายจัดคิวด้วย) - คืนแท็บที่ซ่อนไว้ล่วงหน้ากลับมาให้ถูกต้อง
+          const requestTabBtn = document.querySelector('.tab-btn[data-tab="form-view"]');
+          const myRequestsTabBtn = document.querySelector('.tab-btn[data-tab="my-requests-view"]');
+          if (requestTabBtn) requestTabBtn.style.display = '';
+          if (myRequestsTabBtn) myRequestsTabBtn.style.display = '';
+          if (!requestedTab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.tab-btn[data-tab="form-view"]').classList.add('active');
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('form-view').classList.add('active');
           }
         }
 
