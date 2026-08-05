@@ -912,6 +912,9 @@
     </div>
     <button type="button" id="odometer-submit-btn">บันทึกเลขไมล์</button>
     <div id="odometer-report-status" class="hint"></div>
+
+    <div class="hint" style="margin-top:14px;font-weight:600;">ประวัติที่คุณเคยรายงาน (30 วันล่าสุด)</div>
+    <div id="odometer-my-history-list"><p class="hint">กำลังโหลด...</p></div>
   </div>
 
   <div id="odometer-summary-section" style="display:none;">
@@ -3037,6 +3040,7 @@
       dateInput.value = todayBangkokDateStr();
       syncOdometerDate();
       loadOdometerPlates(dateInput.value);
+      loadOdometerMyHistory();
     }
     if (isDispatcherUser) {
       document.getElementById('odometer-summary-section').style.display = '';
@@ -3114,7 +3118,8 @@
         const result = await res.json();
         if (result.status !== 'ok') throw new Error(result.message);
         statusEl.style.color = '';
-        statusEl.textContent = `บันทึกแล้ว: ${result.plate} เลขไมล์ ${result.mileage} กม. (${result.date})`;
+        statusEl.textContent = `บันทึกแล้ว: ${result.plate} เลขไมล์ ${result.mileage} กม. ของวันที่ ${result.date} — รายงานเมื่อ ${result.loggedAt}`;
+        loadOdometerMyHistory(); // รีเฟรชประวัติของตัวเองให้เห็นรายการที่เพิ่งบันทึก/แก้ทับทันที
       } catch (err) {
         statusEl.style.color = '#d64545';
         statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + friendlyErrorMessage(err);
@@ -3157,6 +3162,32 @@
 
   const syncOdometerSummaryDate = wireDateOverlay('odometer-summary-date', 'odometer-summary-date-display-text', 'odometer-summary-date-today-btn', loadOdometerSummary);
   document.getElementById('odometer-summary-refresh-btn').addEventListener('click', loadOdometerSummary);
+
+  // ประวัติเลขไมล์ที่คนขับคนนี้เคยรายงานไว้เอง (30 วันล่าสุด) - ให้เห็นว่ารายงานวันไหนไปแล้วบ้าง กันรายงานซ้ำ/ลืมว่ารายงานหรือยัง (2026-08-05)
+  async function loadOdometerMyHistory() {
+    const container = document.getElementById('odometer-my-history-list');
+    container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
+    try {
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=myOdometerReadings&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') +
+        '&fromDate=' + encodeURIComponent(daysAgoBangkokDateStr(30)) + '&toDate=' + encodeURIComponent(todayBangkokDateStr()));
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+
+      if (result.readings.length === 0) {
+        container.innerHTML = '<p class="hint">ยังไม่เคยรายงานเลขไมล์ในช่วง 30 วันล่าสุด</p>';
+        return;
+      }
+      container.innerHTML = result.readings.map(r => `
+        <div class="trip-job-card" style="cursor:default;">
+          <div>${escapeHtml(r.date)} · 🚛 ${escapeHtml(r.plate)}</div>
+          <div class="trip-job-progress">เลขไมล์ ${escapeHtml(String(r.mileage))} กม. · รายงานเมื่อ ${escapeHtml(r.loggedAt)}</div>
+          ${r.photoUrl ? `<div class="trip-job-progress"><a href="${r.photoUrl}" target="_blank">📷 ดูรูปหน้าปัดไมล์</a></div>` : ''}
+        </div>
+      `).join('');
+    } catch (err) {
+      container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + friendlyErrorMessage(err) + '</p>';
+    }
+  }
 
   // ---------- tab switching ----------
   document.querySelectorAll('.tab-btn').forEach(btn => {
