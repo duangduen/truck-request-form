@@ -528,6 +528,17 @@
     font-family: inherit;
     resize: vertical;
   }
+  /* #site-override-input ใช้ input ตรงๆ ในโมดัล (ไม่ได้ห่อด้วย .field เหมือนฟอร์มหลัก) - CSS กลาง select,input,textarea
+     ตั้ง border:none/background:transparent ไว้ (ออกแบบมาให้ .field เป็นตัวให้กรอบแทน) ถ้าไม่ใส่กรอบเองตรงนี้จะดูเหมือนข้อความเฉยๆ
+     ไม่เหมือนช่องกรอกได้เลย (สับสน 2026-08-05 - ผู้ใช้ทดสอบแล้วนึกว่าไม่มีช่องให้กรอก) */
+  #site-override-input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 15px;
+    font-family: inherit;
+  }
   .modal-actions { display: flex; gap: 10px; margin-top: 12px; }
   .modal-actions button {
     flex: 1;
@@ -1006,6 +1017,7 @@
   <div class="modal-box">
     <div class="modal-title">แก้ไขหน้างานของวันนี้</div>
     <div class="hint" style="margin-bottom:8px;">แก้เฉพาะหน้างานที่คนขับเห็น/บันทึกของ "วันนี้" เท่านั้น ไม่กระทบคำขอเดิมหรือวันอื่น</div>
+    <label style="display:block;font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">พิมพ์ชื่อหน้างานใหม่ตรงนี้ ⬇️</label>
     <input type="text" id="site-override-input" placeholder="ชื่อหน้างานใหม่สำหรับวันนี้">
     <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;color:var(--text-muted);">
       <input type="checkbox" id="site-override-update-logged" checked style="width:auto;">
