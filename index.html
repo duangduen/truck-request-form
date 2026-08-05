@@ -2917,11 +2917,39 @@
   let selectedTripHistory = null;
   let selectedTripHistoryIdx = -1; // เก็บ index ที่เลือกไว้ ใช้เช็คว่าแตะซ้ำการ์ดเดิมหรือเปล่า (แตะซ้ำ = ยกเลิกเลือก)
   let tripHistoryPhotos = []; // [{base64, mimeType}] - รูปที่จะ "เพิ่มต่อ" ของเดิม (2026-08-05)
+  let removedExistingPhotoUrls = []; // URL รูปเดิมที่ทำเครื่องหมายจะลบ (ยังไม่ลบจริงจนกว่าจะกด "บันทึกการแก้ไข") (2026-08-05 ตามที่คนขับขอ - แนบรูปผิดแล้วแก้ไม่ได้)
 
   function refreshTripHistoryPhotoThumbs() {
     renderPhotoThumbs(document.getElementById('trip-history-photo-thumbs'), tripHistoryPhotos, (removeIdx) => {
       tripHistoryPhotos.splice(removeIdx, 1);
       refreshTripHistoryPhotoThumbs();
+    });
+  }
+
+  // รูปที่เคยแนบไว้แล้ว (มีแค่ลิงก์ ไม่มีไบต์รูปให้แสดงตัวอย่างในเครื่อง เพราะลิงก์ Drive เป็นหน้าเว็บดูรูป ไม่ใช่ URL รูปดิบ) - แสดงเป็นแถวลิงก์ + ปุ่ม
+  // ลบ/เลิกลบสลับกัน (ทำเครื่องหมายไว้ก่อน ยังไม่ลบจริงจนกว่าจะกด "บันทึกการแก้ไข" - เผื่อกดลบผิดกดเลิกลบได้ทัน)
+  function renderExistingPhotoList() {
+    const container = document.getElementById('trip-history-current-photo');
+    const photoUrls = (selectedTripHistory && selectedTripHistory.photoUrls) || [];
+    if (photoUrls.length === 0) {
+      container.innerHTML = '<span class="hint">ยังไม่มีรูปใบสั่ง/ใบส่งของ/ตั๋วทอย</span>';
+      return;
+    }
+    container.innerHTML = '';
+    photoUrls.forEach((u, i) => {
+      const marked = removedExistingPhotoUrls.indexOf(u) !== -1;
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;';
+      row.innerHTML = `
+        <a href="${u}" target="_blank" style="${marked ? 'text-decoration:line-through;color:#999;' : ''}">📷 รูปที่ ${i + 1}${marked ? ' (จะถูกลบ)' : ''}</a>
+        <button type="button" class="btn-small" style="flex:0 0 auto;padding:2px 10px;${marked ? '' : 'border-color:#d64545;color:#d64545;'}">${marked ? 'เลิกลบ' : 'ลบ'}</button>
+      `;
+      row.querySelector('button').addEventListener('click', () => {
+        const idx = removedExistingPhotoUrls.indexOf(u);
+        if (idx === -1) removedExistingPhotoUrls.push(u); else removedExistingPhotoUrls.splice(idx, 1);
+        renderExistingPhotoList();
+      });
+      container.appendChild(row);
     });
   }
 
@@ -3005,10 +3033,8 @@
     document.getElementById('trip-history-trip-count').value = selectedTripHistory.tripCount || '';
     document.getElementById('trip-history-distance').value = selectedTripHistory.distanceKm || '';
     document.getElementById('trip-history-material-input').value = selectedTripHistory.material || '';
-    const photoUrls = selectedTripHistory.photoUrls || [];
-    document.getElementById('trip-history-current-photo').innerHTML = photoUrls.length
-      ? photoUrls.map((u, i) => `<a href="${u}" target="_blank">📷 รูปที่ ${i + 1}</a>`).join(' &nbsp; ')
-      : '<span class="hint">ยังไม่มีรูปใบสั่ง/ใบส่งของ/ตั๋วทอย</span>';
+    removedExistingPhotoUrls = [];
+    renderExistingPhotoList();
     document.getElementById('trip-history-photo-input').value = '';
     tripHistoryPhotos = [];
     refreshTripHistoryPhotoThumbs();
@@ -3066,7 +3092,8 @@
             unit: historyUnit,
             material: historyMaterial,
             distanceKm: distanceKm ? Number(distanceKm) : '',
-            photos: tripHistoryPhotos
+            photos: tripHistoryPhotos,
+            removePhotoUrls: removedExistingPhotoUrls
           })
         });
         const result = await res.json();
