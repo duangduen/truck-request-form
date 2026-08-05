@@ -528,17 +528,6 @@
     font-family: inherit;
     resize: vertical;
   }
-  /* #site-override-input ใช้ input ตรงๆ ในโมดัล (ไม่ได้ห่อด้วย .field เหมือนฟอร์มหลัก) - CSS กลาง select,input,textarea
-     ตั้ง border:none/background:transparent ไว้ (ออกแบบมาให้ .field เป็นตัวให้กรอบแทน) ถ้าไม่ใส่กรอบเองตรงนี้จะดูเหมือนข้อความเฉยๆ
-     ไม่เหมือนช่องกรอกได้เลย (สับสน 2026-08-05 - ผู้ใช้ทดสอบแล้วนึกว่าไม่มีช่องให้กรอก) */
-  #site-override-input {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px;
-    font-size: 15px;
-    font-family: inherit;
-  }
   .modal-actions { display: flex; gap: 10px; margin-top: 12px; }
   .modal-actions button {
     flex: 1;
@@ -1011,24 +1000,10 @@
   </div>
 </div>
 
-<!-- แก้ไขหน้างานที่แช่แข็งไว้ของ "วันนี้" เท่านั้น (2026-08-05) - คู่กับ getOrSnapshotJobSite_ ฝั่ง Code.gs ป้องกันบั๊กหน้างานไม่ตรงย้อนหลัง
-     แต่ทำให้แก้จากในแอปไม่ได้เลยถ้าไม่มีปุ่มนี้ -->
-<div id="site-override-modal-overlay" class="modal-overlay">
-  <div class="modal-box">
-    <div class="modal-title">แก้ไขหน้างานของวันนี้</div>
-    <div class="hint" style="margin-bottom:8px;">แก้เฉพาะหน้างานที่คนขับเห็น/บันทึกของ "วันนี้" เท่านั้น ไม่กระทบคำขอเดิมหรือวันอื่น</div>
-    <label style="display:block;font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:4px;">พิมพ์ชื่อหน้างานใหม่ตรงนี้ ⬇️</label>
-    <input type="text" id="site-override-input" placeholder="ชื่อหน้างานใหม่สำหรับวันนี้">
-    <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;color:var(--text-muted);">
-      <input type="checkbox" id="site-override-update-logged" checked style="width:auto;">
-      อัปเดตประวัติการวิ่งที่บันทึกไปแล้ววันนี้ให้ตรงกันด้วย (ถ้ามี)
-    </label>
-    <div class="modal-actions">
-      <button type="button" id="site-override-cancel">ยกเลิก</button>
-      <button type="button" id="site-override-confirm">บันทึก</button>
-    </div>
-  </div>
-</div>
+<!-- ปุ่ม/โมดัล "แก้หน้างานวันนี้" ถูกถอดออกแล้ว (2026-08-05) - ผู้ใช้ยืนยันว่าในทางปฏิบัติไม่มีเคส "แก้ไขชื่อหน้างานของงานเดิมกลางวัน"
+     เคสจริงคือ "ย้ายรถบางคันไปอีกงานหนึ่ง" ซึ่งใช้ปุ่ม "แก้ไขการจัดคิว" (openAssignModal) + ตัวกัน getEffectiveAssignedPlatesForDate_
+     ฝั่ง Code.gs แทนอยู่แล้ว ถ้ามีเคสพิมพ์ผิดชื่อหน้างานจริงๆ ในอนาคต ยังแก้ตรงชีต "สแนปช็อตหน้างานประจำวัน" เองได้ (escape hatch)
+     backend overrideJobSiteSnapshot() ใน Code.gs ยังคงอยู่ (เผื่อกลับมาใช้ทีหลัง) แต่ไม่มีปุ่มเรียกจากหน้าแอปแล้ว -->
 
 <script>
   // ============ ตั้งค่าที่ต้องแก้ก่อนใช้งานจริง ============
@@ -1831,14 +1806,12 @@
       ${r.location ? `<div class="hint">📍 <a href="${escapeHtml(locationHref(r.location))}" target="_blank" rel="noopener">ดูพิกัดปลายทาง</a></div>` : ''}
       <div class="card-actions">
         <button class="btn-small edit-btn assign-btn">แก้ไขการจัดคิว</button>
-        <button class="btn-small edit-btn site-override-btn">✏️ แก้หน้างานวันนี้</button>
         ${pauseResumeBtn}
         <button class="btn-small complete-btn dispatch-complete-btn">✅ ปิดงาน</button>
         <button class="btn-small cancel-btn dispatch-cancel-btn">ยกเลิกคำขอนี้</button>
       </div>
     `;
     card.querySelector('.assign-btn').addEventListener('click', () => openAssignModal(r.requestId, r.truckCount, r.material, r.assigned, r.startDate, r.site));
-    card.querySelector('.site-override-btn').addEventListener('click', () => openSiteOverrideModal(r.requestId, r.site));
     card.querySelector('.dispatch-complete-btn').addEventListener('click', () => doDispatchComplete(r.requestId, r.site));
     card.querySelector('.dispatch-cancel-btn').addEventListener('click', () => doDispatchCancel(r.requestId));
     if (isPaused) {
@@ -2617,50 +2590,7 @@
     });
   }
 
-  // ---------- แก้ไขหน้างานที่แช่แข็งไว้ของ "วันนี้" (2026-08-05) ----------
-  // คู่กับ getOrSnapshotJobSite_ ฝั่ง Code.gs (แก้บั๊กหน้างานไม่ตรงย้อนหลัง - ค่าหน้างานที่คนขับเห็น/บันทึกจะแช่แข็งไว้ตั้งแต่
-  // ครั้งแรกที่มีใครอ่าน/บันทึกงานนี้ในวันนั้น) ปุ่มนี้ให้ฝ่ายจัดคิวแก้ค่าที่แช่แข็งไว้แล้วได้จากในแอปตรงๆ แทนการไปแก้ในชีตเอง
-  let siteOverrideRequestId = null;
-  function openSiteOverrideModal(requestId, currentSite) {
-    siteOverrideRequestId = requestId;
-    document.getElementById('site-override-input').value = currentSite || '';
-    document.getElementById('site-override-update-logged').checked = true;
-    document.getElementById('site-override-modal-overlay').classList.add('active');
-  }
-  document.getElementById('site-override-cancel').addEventListener('click', () => {
-    document.getElementById('site-override-modal-overlay').classList.remove('active');
-  });
-  document.getElementById('site-override-confirm').addEventListener('click', () => {
-    const newSite = document.getElementById('site-override-input').value.trim();
-    if (!newSite) { alert('กรุณากรอกชื่อหน้างานใหม่'); return; }
-    const updateLogged = document.getElementById('site-override-update-logged').checked;
-    const confirmBtn = document.getElementById('site-override-confirm');
-    runOnce('siteOverride:' + siteOverrideRequestId, async () => {
-      const originalText = confirmBtn.textContent;
-      confirmBtn.disabled = true; confirmBtn.textContent = 'กำลังบันทึก...';
-      try {
-        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'overrideJobSiteSnapshot',
-            lineUserId: lineProfile ? lineProfile.userId : '',
-            requestId: siteOverrideRequestId,
-            newSite: newSite,
-            updateLoggedToday: updateLogged
-          })
-        });
-        const result = await res.json();
-        if (result.status !== 'ok') throw new Error(result.message);
-        document.getElementById('site-override-modal-overlay').classList.remove('active');
-        alert('แก้ไขหน้างานของวันนี้เรียบร้อย' + (result.updatedLoggedCount ? ` (อัปเดตประวัติที่บันทึกไปแล้ว ${result.updatedLoggedCount} รายการ)` : ''));
-      } catch (err) {
-        alert('แก้ไม่สำเร็จ: ' + friendlyErrorMessage(err));
-      } finally {
-        confirmBtn.disabled = false; confirmBtn.textContent = originalText;
-      }
-    });
-  });
+  // ปุ่ม/โมดัล "แก้หน้างานวันนี้" ถูกถอดออกแล้ว (2026-08-05) - ดูหมายเหตุที่จุดที่เคยมีโมดัลนี้ใน HTML ด้านบน (เหตุผลเดียวกัน)
 
   // ---------- บันทึกการวิ่ง (คนขับ) ----------
   let driverJobsData = [];
