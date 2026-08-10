@@ -2214,6 +2214,12 @@
     syncSummaryDateDisplay();
     loadDailySummary();
   });
+  // เสริมความชัวร์ในการเปิดปฏิทิน (2026-08-06 - พบว่าหลังเปลี่ยนวันที่ไปแล้ว 1-2 ครั้ง บาง browser จะคลิกแล้วปฏิทินไม่เด้งขึ้นอีก
+  // ทั้งที่ input ยังอยู่ในตำแหน่งเดิมทุกอย่าง) เรียก showPicker() ตรงๆ ซ้อนไว้เป็นตัวเสริมจากการคลิกทะลุปกติ - ไม่กระทบ browser
+  // ที่ทำงานถูกต้องอยู่แล้ว (เรียกซ้ำแค่ทำให้ปฏิทินที่เปิดอยู่แล้วไม่เปลี่ยนอะไร) ครอบ try/catch เพราะ browser เก่าไม่รองรับ showPicker()
+  document.getElementById('summary-date-input').addEventListener('click', function () {
+    try { if (this.showPicker) this.showPicker(); } catch (e) { /* browser ไม่รองรับ/ไม่ใช่ user gesture - ปล่อยให้คลิกทะลุปกติทำงานแทน */ }
+  });
   document.getElementById('summary-today-btn').addEventListener('click', () => {
     document.getElementById('summary-date-input').value = todayDateStr();
     syncSummaryDateDisplay();
@@ -2632,6 +2638,12 @@
     const displayText = document.getElementById(displayTextId);
     const sync = () => { displayText.textContent = input.value ? formatThaiDateShort(input.value) : 'เลือกวันที่'; };
     input.addEventListener('change', () => { sync(); if (onChange) onChange(); });
+    // เสริมความชัวร์ในการเปิดปฏิทิน (2026-08-06) - เหมือนกับ summary-date-input ตัวแรกสุด พบว่าบาง browser หลังเปลี่ยนวันที่
+    // ไปแล้ว 1-2 ครั้ง คลิกทะลุ input โปร่งใสแล้วปฏิทินไม่เด้งขึ้นอีก เรียก showPicker() ซ้อนเป็นตัวเสริมให้กับ date picker ทุกตัว
+    // ที่ใช้ helper ร่วมนี้ (บันทึกการวิ่ง/ประวัติการวิ่ง/เลขไมล์) ครอบ try/catch เผื่อ browser ไม่รองรับ
+    input.addEventListener('click', function () {
+      try { if (this.showPicker) this.showPicker(); } catch (e) { /* ปล่อยให้คลิกทะลุปกติทำงานแทน */ }
+    });
     sync();
     if (todayBtnId) {
       const btn = document.getElementById(todayBtnId);
