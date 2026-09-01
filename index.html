@@ -63,6 +63,8 @@
   header h1 { margin: 0; font-size: 18px; font-weight: 700; }
   header p { margin: 4px 0 0; font-size: 13px; opacity: 0.9; }
 
+  /* เลื่อนแนวนอนแทนการบีบให้พอดีจอ (2026-08-10) - พอมี 7 แท็บ การใช้ flex:1 ทำให้แต่ละแท็บแคบจนชื่อไทยตัดขึ้นบรรทัดใหม่
+     ("ส่งคำขอ / ใหม่") อ่านยากและสูงเกินจำเป็น - ให้แต่ละแท็บกว้างตามเนื้อหาแล้วปัดนิ้วเลื่อนเอาแทน (แพทเทิร์นมาตรฐานบนมือถือ) */
   .tabs {
     display: flex;
     background: var(--card);
@@ -70,12 +72,18 @@
     position: sticky;
     top: 62px;
     z-index: 19;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
   }
+  .tabs::-webkit-scrollbar { display: none; } /* Chrome/Safari - ซ่อนแถบเลื่อนแต่ยังปัดได้ */
   .tab-btn {
-    flex: 1;
+    flex: 0 0 auto;
+    white-space: nowrap;
     border: none;
     background: transparent;
-    padding: 12px;
+    padding: 12px 14px;
     font-size: 14px;
     font-weight: 600;
     color: var(--text-muted);
@@ -548,6 +556,109 @@
   #assign-modal-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
   #assign-modal-confirm { background: var(--primary); border: none; color: white; }
 
+  /* ---------- แท็บวันหยุด (2026-08-10) ---------- */
+  /* view นี้ไม่ได้อยู่ใน <form> เหมือนแท็บส่งคำขอ เลยไม่ได้ padding/gap จาก `form {}` มาให้ ต้องจัดเอง */
+  #dayoff-view { padding: 16px; }
+  #dayoff-view > .field { margin-bottom: 12px; }
+  #dayoff-save-btn {
+    display: block;
+    width: 100%;
+    background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+    color: white;
+    border: none;
+    padding: 13px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    margin-top: 4px;
+  }
+  #dayoff-save-btn:active { box-shadow: 0 1px 2px rgba(0,0,0,0.15); transform: translateY(1px); }
+  #dayoff-save-btn:disabled { opacity: 0.6; box-shadow: none; }
+  /* รายชื่อคนขับแบบติ๊ก checkbox ของวันที่เลือก (2026-08-10) - จัดวันหยุดทีเดียวหลายคนได้เร็วกว่ากรอกทีละคน */
+  #dayoff-checklist-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .dayoff-checklist-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: #f7f9f7;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+  .dayoff-count-badge {
+    background: var(--primary);
+    color: white;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  #dayoff-checklist { max-height: 46vh; overflow-y: auto; }
+  .dayoff-check-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .dayoff-check-row:last-child { border-bottom: none; }
+  .dayoff-check-row input[type="checkbox"] { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--primary); }
+  .dayoff-check-row.checked { background: #fff8ec; }
+  .dayoff-check-row.locked { opacity: 0.65; cursor: not-allowed; }
+  .dayoff-check-name { font-weight: 600; }
+  .dayoff-check-plate { font-size: 12px; color: var(--text-muted); }
+  .dayoff-check-lock { font-size: 11px; color: #b5651d; }
+
+  /* หัวข้อคั่นรายการวันหยุดที่ลงไว้ - เส้นคั่นบางๆ ให้แยกส่วน "กรอกใหม่" กับ "ที่ลงไว้แล้ว" ออกจากกันชัดขึ้น */
+  .dayoff-list-heading {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 10px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+  }
+  /* การ์ดวันหยุด - กะทัดรัดกว่า .request-card ทั่วไป (ข้อมูลน้อย ไม่ต้องใช้พื้นที่เยอะ) */
+  .dayoff-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 4px solid #e8a33d;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .dayoff-card-body { flex: 1; min-width: 0; }
+  .dayoff-card-name { font-weight: 700; font-size: 14px; }
+  .dayoff-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .dayoff-card-del {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: auto;
+    padding: 5px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    background: white;
+    border: 1px solid #d64545;
+    color: #d64545;
+  }
+
   #assign-checkbox-list {
     max-height: 260px;
     overflow-y: auto;
@@ -761,45 +872,33 @@
 <!-- แยกวันหยุดออกจากสถานะรถประจำวัน (2026-08-10) - เดิมตั้งวันหยุดได้เฉพาะรถที่ยังไม่ถูกจัดคิว ต้องถอดรถออกจากงานก่อนทุกครั้ง
      ตรงนี้ตั้งล่วงหน้าได้เสมอ ไม่ว่ารถจะถูกจัดคิวไว้แล้วหรือไม่ แล้วระบบจะไปเตือนเองที่แท็บจัดคิว -->
 <div id="dayoff-view" class="view">
-  <div class="hint">ลงวันหยุดของคนขับล่วงหน้าได้เลย ไม่ต้องถอดรถออกจากงานก่อน ระบบจะเตือนให้เองถ้ามีงานที่จัดคิวไว้ตรงกับวันหยุด</div>
+  <div class="hint">เลือกวันที่ แล้วติ๊กคนที่หยุดวันนั้นได้เลยทีเดียวหลายคน ลงล่วงหน้าได้ ไม่ต้องถอดรถออกจากงานก่อน ระบบจะเตือนให้เองถ้ามีงานที่จัดคิวไว้ตรงกับวันหยุด</div>
 
   <div class="field">
-    <label>คนขับ <span class="required">*</span></label>
-    <div style="position:relative;">
-      <input type="text" id="dayoff-driver-input" placeholder="พิมพ์เพื่อค้นหาชื่อคนขับ" autocomplete="off">
-      <div class="dropdown-list" id="dayoff-driver-list"></div>
+    <label>วันที่ <span class="required">*</span></label>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <div class="date-overlay-wrap" style="flex:1;">
+        <div class="date-overlay-display"><span id="dayoff-date-display-text">เลือกวันที่</span><span>📅</span></div>
+        <input type="date" id="dayoff-date" class="date-overlay-input">
+      </div>
+      <button type="button" id="dayoff-today-btn" class="btn-small" style="flex:0 0 auto;padding:0 12px;">วันนี้</button>
+      <button type="button" id="dayoff-tomorrow-btn" class="btn-small" style="flex:0 0 auto;padding:0 12px;">พรุ่งนี้</button>
     </div>
   </div>
 
-  <div class="field">
-    <label>ตั้งแต่วันที่ <span class="required">*</span></label>
-    <div class="date-overlay-wrap">
-      <div class="date-overlay-display"><span id="dayoff-from-display-text">เลือกวันที่</span><span>📅</span></div>
-      <input type="date" id="dayoff-from-date" class="date-overlay-input">
+  <div id="dayoff-checklist-wrap">
+    <div class="dayoff-checklist-header">
+      <span>ติ๊กคนที่หยุดวันนี้</span>
+      <span id="dayoff-checked-count" class="dayoff-count-badge">0 คน</span>
     </div>
+    <div id="dayoff-checklist"><p class="hint">กำลังโหลด...</p></div>
   </div>
 
-  <div class="field">
-    <label>ถึงวันที่</label>
-    <div class="date-overlay-wrap">
-      <div class="date-overlay-display"><span id="dayoff-to-display-text">เลือกวันที่</span><span>📅</span></div>
-      <input type="date" id="dayoff-to-date" class="date-overlay-input">
-    </div>
-    <div class="hint" style="margin-top:6px;">เว้นว่างไว้ = หยุดวันเดียว (ตามวันที่เริ่ม)</div>
-  </div>
-
-  <div class="field">
-    <label>หมายเหตุ</label>
-    <input type="text" id="dayoff-note" placeholder="เช่น ลากิจ, ลาป่วย (ไม่บังคับ)">
-  </div>
-
-  <button type="button" id="dayoff-save-btn">บันทึกวันหยุด</button>
+  <button type="button" id="dayoff-save-btn">บันทึกวันหยุดของวันนี้</button>
   <div id="dayoff-save-status" class="hint" style="margin-top:8px;"></div>
 
-  <div style="margin-top:22px;">
-    <div style="font-weight:700;font-size:14px;margin-bottom:8px;">วันหยุดที่ลงไว้ (ตั้งแต่วันนี้เป็นต้นไป)</div>
-    <div id="dayoff-list"><p class="hint">กำลังโหลด...</p></div>
-  </div>
+  <div class="dayoff-list-heading" style="margin-top:14px;">วันหยุดที่ลงไว้ (ตั้งแต่วันนี้เป็นต้นไป)</div>
+  <div id="dayoff-list"><p class="hint">กำลังโหลด...</p></div>
 </div>
 
 <!-- ============ แท็บบันทึกการวิ่ง (คนขับที่ลงทะเบียนแล้วเท่านั้น) ============ -->
@@ -2732,20 +2831,36 @@
   // ปุ่ม/โมดัล "แก้หน้างานวันนี้" ถูกถอดออกแล้ว (2026-08-05) - ดูหมายเหตุที่จุดที่เคยมีโมดัลนี้ใน HTML ด้านบน (เหตุผลเดียวกัน)
 
   // ---------- แท็บวันหยุดคนขับ (ฝ่ายจัดคิว) - 2026-08-10 ----------
-  let dayOffDriverNames = []; // เติมจาก action=driverDayOffs (ส่งมาพร้อมกันเลย ไม่ต้องยิง action=drivers ซ้ำ)
+  // UI แบบ "เลือกวันที่ 1 วัน แล้วติ๊กคนที่หยุด" (ปรับตามที่คนจัดคิวเสนอ) - วิธีทำงานจริงคือหยุดสัปดาห์ละ 1 วันต่อคน
+  // และจัดทีเดียวพร้อมกันหลายคน การไล่กรอกทีละคนจึงช้ากว่ามาก
+  let dayOffDrivers = []; // [{name, plate, label, checked, lockedByRange, rangeText}] ของวันที่กำลังดู
 
   async function loadDayOffs() {
-    const container = document.getElementById('dayoff-list');
-    container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
+    const listContainer = document.getElementById('dayoff-list');
+    const checklist = document.getElementById('dayoff-checklist');
+    const dateInput = document.getElementById('dayoff-date');
+    if (!dateInput.value) { dateInput.value = todayDateStr(); syncDayOffDate(); }
+
+    checklist.innerHTML = '<p class="hint" style="padding:12px;">กำลังโหลด...</p>';
+    listContainer.innerHTML = '<p class="hint">กำลังโหลด...</p>';
     try {
-      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=driverDayOffs&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''), undefined, LOAD_TIMEOUT_MS);
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=dayOffsForDate&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') + '&date=' + encodeURIComponent(dateInput.value), undefined, LOAD_TIMEOUT_MS);
       const result = await res.json();
       if (result.status !== 'ok') throw new Error(result.message);
 
-      dayOffDriverNames = result.driverNames || [];
-      renderDayOffList(result.dayOffs || []);
+      dayOffDrivers = result.drivers || [];
+      renderDayOffChecklist();
+      renderDayOffList(result.upcoming || []);
     } catch (err) {
-      container.innerHTML = '<p class="hint" style="color:var(--error);">โหลดไม่สำเร็จ: ' + escapeHtml(friendlyErrorMessage(err)) + '</p>';
+      checklist.innerHTML = '';
+      const container = listContainer;
+      // ถ้าเซิร์ฟเวอร์ตอบเป็นข้อความ default ของ Apps Script (ไม่ใช่ JSON) แปลว่า Code.gs ที่ deploy อยู่ยังไม่รู้จัก action นี้
+      // = ยังไม่ได้ deploy เวอร์ชันใหม่ - ขึ้นข้อความบอกตรงๆ ดีกว่าโชว์ error ดิบที่อ่านไม่รู้เรื่อง (2026-08-10)
+      const raw = String((err && err.message) || '');
+      const notDeployed = raw.indexOf('is not valid JSON') !== -1 || raw.indexOf('Unexpected token') !== -1;
+      container.innerHTML = notDeployed
+        ? '<p class="hint" style="color:var(--error);">ยังใช้แท็บนี้ไม่ได้ เพราะสคริปต์ฝั่งเซิร์ฟเวอร์ (Code.gs) ยังไม่ได้อัปเดตเป็นเวอร์ชันใหม่<br>วิธีแก้: Apps Script → Deploy → Manage deployments → แก้ไข → Version: New version → Deploy</p>'
+        : '<p class="hint" style="color:var(--error);">โหลดไม่สำเร็จ: ' + escapeHtml(friendlyErrorMessage(err)) + '</p>';
     }
   }
 
@@ -2758,21 +2873,29 @@
     container.innerHTML = '';
     dayOffs.forEach(d => {
       const card = document.createElement('div');
-      card.className = 'request-card';
+      card.className = 'dayoff-card';
+      const days = countDaysInclusive(d.fromDate, d.toDate);
       const rangeText = (d.fromDate === d.toDate)
         ? formatThaiDateShort(d.fromDate)
-        : `${formatThaiDateShort(d.fromDate)} - ${formatThaiDateShort(d.toDate)}`;
+        : `${formatThaiDateShort(d.fromDate)} – ${formatThaiDateShort(d.toDate)} (${days} วัน)`;
       card.innerHTML = `
-        <div><strong>${escapeHtml(d.driverName)}</strong></div>
-        <div class="hint">📅 ${escapeHtml(rangeText)}</div>
-        ${d.note ? `<div class="hint">📝 ${escapeHtml(d.note)}</div>` : ''}
-        <div class="card-actions">
-          <button class="btn-small cancel-btn dayoff-delete-btn">ลบ</button>
+        <div class="dayoff-card-body">
+          <div class="dayoff-card-name">${escapeHtml(d.driverName)}</div>
+          <div class="dayoff-card-meta">📅 ${escapeHtml(rangeText)}${d.note ? ' · ' + escapeHtml(d.note) : ''}</div>
         </div>
+        <button type="button" class="dayoff-card-del">ลบ</button>
       `;
-      card.querySelector('.dayoff-delete-btn').addEventListener('click', () => deleteDayOff(d));
+      card.querySelector('.dayoff-card-del').addEventListener('click', () => deleteDayOff(d));
       container.appendChild(card);
     });
+  }
+
+  // นับจำนวนวันแบบรวมวันเริ่มและวันสิ้นสุด (12-14 = 3 วัน) - ใช้ UTC กันปัญหา DST/timezone ทำให้ปัดเศษเพี้ยน
+  function countDaysInclusive(fromStr, toStr) {
+    const a = fromStr.split('-'), b = toStr.split('-');
+    const from = Date.UTC(+a[0], +a[1] - 1, +a[2]);
+    const to = Date.UTC(+b[0], +b[1] - 1, +b[2]);
+    return Math.round((to - from) / 86400000) + 1;
   }
 
   function deleteDayOff(d) {
@@ -2797,19 +2920,70 @@
     });
   }
 
+  // รายชื่อคนขับทั้งหมดของวันที่เลือก พร้อมสถานะติ๊ก - คนที่อยู่ในช่วงหยุดยาว (fromDate != toDate) ล็อกไว้ ติ๊กออกจากหน้านี้ไม่ได้
+  // ต้องไปลบทั้งช่วงจากรายการด้านล่างแทน กันเผลอลบช่วงยาวทิ้งทั้งก้อนโดยไม่ตั้งใจ
+  function renderDayOffChecklist() {
+    const container = document.getElementById('dayoff-checklist');
+    if (dayOffDrivers.length === 0) {
+      container.innerHTML = '<p class="hint" style="padding:12px;">ไม่พบรายชื่อคนขับ</p>';
+      updateDayOffCount();
+      return;
+    }
+    container.innerHTML = '';
+    dayOffDrivers.forEach((d, idx) => {
+      const row = document.createElement('label');
+      row.className = 'dayoff-check-row' + (d.checked ? ' checked' : '') + (d.lockedByRange ? ' locked' : '');
+      row.innerHTML = `
+        <input type="checkbox" ${d.checked ? 'checked' : ''} ${d.lockedByRange ? 'disabled' : ''}>
+        <div style="flex:1;min-width:0;">
+          <div class="dayoff-check-name">${escapeHtml(d.name)}</div>
+          <div class="dayoff-check-plate">${escapeHtml(d.plate || '')}</div>
+          ${d.lockedByRange ? `<div class="dayoff-check-lock">🔒 อยู่ในช่วงหยุดยาว ${escapeHtml(d.rangeText)} (ลบได้จากรายการด้านล่าง)</div>` : ''}
+        </div>
+      `;
+      const cb = row.querySelector('input');
+      cb.addEventListener('change', () => {
+        dayOffDrivers[idx].checked = cb.checked;
+        row.classList.toggle('checked', cb.checked);
+        updateDayOffCount();
+      });
+      container.appendChild(row);
+    });
+    updateDayOffCount();
+  }
+
+  function updateDayOffCount() {
+    const n = dayOffDrivers.filter(d => d.checked).length;
+    document.getElementById('dayoff-checked-count').textContent = n + ' คน';
+  }
+
+  function syncDayOffDate() {
+    const v = document.getElementById('dayoff-date').value;
+    document.getElementById('dayoff-date-display-text').textContent = v ? formatThaiDateShort(v) : 'เลือกวันที่';
+  }
+
+  document.getElementById('dayoff-date').addEventListener('change', () => { syncDayOffDate(); loadDayOffs(); });
+  document.getElementById('dayoff-date').addEventListener('click', function () {
+    try { if (this.showPicker) this.showPicker(); } catch (e) { /* ปล่อยให้คลิกทะลุปกติทำงานแทน */ }
+  });
+  document.getElementById('dayoff-today-btn').addEventListener('click', () => {
+    document.getElementById('dayoff-date').value = todayDateStr();
+    syncDayOffDate(); loadDayOffs();
+  });
+  document.getElementById('dayoff-tomorrow-btn').addEventListener('click', () => {
+    document.getElementById('dayoff-date').value = tomorrowDateStr();
+    syncDayOffDate(); loadDayOffs();
+  });
+
   document.getElementById('dayoff-save-btn').addEventListener('click', () => {
-    const driverName = document.getElementById('dayoff-driver-input').value.trim();
-    const fromDate = document.getElementById('dayoff-from-date').value;
-    const toDate = document.getElementById('dayoff-to-date').value;
-    const note = document.getElementById('dayoff-note').value.trim();
+    const date = document.getElementById('dayoff-date').value;
     const statusEl = document.getElementById('dayoff-save-status');
+    if (!date) { statusEl.textContent = 'กรุณาเลือกวันที่'; statusEl.style.color = 'var(--error)'; return; }
 
-    if (!driverName) { statusEl.textContent = 'กรุณาเลือกคนขับ'; statusEl.style.color = 'var(--error)'; return; }
-    if (!fromDate) { statusEl.textContent = 'กรุณาเลือกวันที่เริ่ม'; statusEl.style.color = 'var(--error)'; return; }
-    if (toDate && toDate < fromDate) { statusEl.textContent = 'วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม'; statusEl.style.color = 'var(--error)'; return; }
-
+    // ส่งเฉพาะคนที่ติ๊กและไม่ได้ถูกล็อกด้วยช่วงหยุดยาว (ฝั่งเซิร์ฟเวอร์จัดการแถวช่วงยาวแยกอยู่แล้ว ไม่ต้องส่งมาซ้ำ)
+    const checkedNames = dayOffDrivers.filter(d => d.checked && !d.lockedByRange).map(d => d.name);
     const btn = document.getElementById('dayoff-save-btn');
-    runOnce('saveDayOff:' + driverName + ':' + fromDate, async () => {
+    runOnce('saveDayOffs:' + date, async () => {
       const originalText = btn.textContent;
       btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
       statusEl.textContent = '';
@@ -2818,21 +2992,19 @@
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
-            action: 'saveDriverDayOff',
+            action: 'saveDayOffsForDate',
             lineUserId: lineProfile ? lineProfile.userId : '',
-            driverName: driverName,
-            fromDate: fromDate,
-            toDate: toDate || fromDate,
-            note: note
+            date: date,
+            driverNames: checkedNames
           })
         });
         const result = await res.json();
         if (result.status !== 'ok') throw new Error(result.message);
-        statusEl.textContent = 'บันทึกวันหยุดเรียบร้อย';
+        const parts = [];
+        if (result.added) parts.push('เพิ่ม ' + result.added + ' คน');
+        if (result.removed) parts.push('เอาออก ' + result.removed + ' คน');
+        statusEl.textContent = parts.length ? ('บันทึกแล้ว: ' + parts.join(', ')) : 'บันทึกแล้ว (ไม่มีการเปลี่ยนแปลง)';
         statusEl.style.color = 'var(--primary-dark)';
-        // เคลียร์ฟอร์มให้พร้อมกรอกคนถัดไป (คนจัดคิวมักลงหลายคนติดกัน) แต่คงวันที่ไว้ เผื่อลงวันเดียวกันหลายคน
-        document.getElementById('dayoff-driver-input').value = '';
-        document.getElementById('dayoff-note').value = '';
         loadDayOffs();
       } catch (err) {
         statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + friendlyErrorMessage(err);
@@ -3557,9 +3729,7 @@
   setupSearchable('source-input', 'source-list', () => optionsData.sources);
   setupSearchable('driver-log-material-input', 'driver-log-material-list', () => optionsData.materials);
   setupSearchable('trip-history-material-input', 'trip-history-material-list', () => optionsData.materials);
-  setupSearchable('dayoff-driver-input', 'dayoff-driver-list', () => dayOffDriverNames);
-  wireDateOverlay('dayoff-from-date', 'dayoff-from-display-text', null, null);
-  wireDateOverlay('dayoff-to-date', 'dayoff-to-display-text', null, null);
+  // แท็บวันหยุดผูก event ของตัวเองไว้แล้วในบล็อกของมัน (ต้อง reload ทั้งรายการเมื่อเปลี่ยนวันที่ ไม่ใช่แค่ sync ข้อความ)
 
   initLiff();
   loadOptions();
