@@ -610,6 +610,7 @@
   <button class="tab-btn active" data-tab="form-view">ส่งคำขอใหม่</button>
   <button class="tab-btn" data-tab="my-requests-view">คำขอของฉัน</button>
   <button class="tab-btn" data-tab="dispatch-view" id="dispatch-tab-btn" style="display:none;">จัดคิว</button>
+  <button class="tab-btn" data-tab="dayoff-view" id="dayoff-tab-btn" style="display:none;">วันหยุด</button>
   <button class="tab-btn" data-tab="driver-log-view" id="driver-log-tab-btn" style="display:none;">บันทึกการวิ่ง</button>
   <button class="tab-btn" data-tab="trip-history-view" id="trip-history-tab-btn" style="display:none;">ประวัติการวิ่ง</button>
   <button class="tab-btn" data-tab="odometer-view" id="odometer-tab-btn" style="display:none;">เลขไมล์</button>
@@ -753,6 +754,51 @@
       <button type="button" id="summary-tomorrow-btn" class="btn-small" style="flex:0 0 auto;padding:0 12px;">พรุ่งนี้</button>
     </div>
     <div id="summary-content"><p class="hint">กำลังโหลด...</p></div>
+  </div>
+</div>
+
+<!-- ============ แท็บวันหยุดคนขับ (ฝ่ายจัดคิวเท่านั้น) ============ -->
+<!-- แยกวันหยุดออกจากสถานะรถประจำวัน (2026-08-10) - เดิมตั้งวันหยุดได้เฉพาะรถที่ยังไม่ถูกจัดคิว ต้องถอดรถออกจากงานก่อนทุกครั้ง
+     ตรงนี้ตั้งล่วงหน้าได้เสมอ ไม่ว่ารถจะถูกจัดคิวไว้แล้วหรือไม่ แล้วระบบจะไปเตือนเองที่แท็บจัดคิว -->
+<div id="dayoff-view" class="view">
+  <div class="hint">ลงวันหยุดของคนขับล่วงหน้าได้เลย ไม่ต้องถอดรถออกจากงานก่อน ระบบจะเตือนให้เองถ้ามีงานที่จัดคิวไว้ตรงกับวันหยุด</div>
+
+  <div class="field">
+    <label>คนขับ <span class="required">*</span></label>
+    <div style="position:relative;">
+      <input type="text" id="dayoff-driver-input" placeholder="พิมพ์เพื่อค้นหาชื่อคนขับ" autocomplete="off">
+      <div class="dropdown-list" id="dayoff-driver-list"></div>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>ตั้งแต่วันที่ <span class="required">*</span></label>
+    <div class="date-overlay-wrap">
+      <div class="date-overlay-display"><span id="dayoff-from-display-text">เลือกวันที่</span><span>📅</span></div>
+      <input type="date" id="dayoff-from-date" class="date-overlay-input">
+    </div>
+  </div>
+
+  <div class="field">
+    <label>ถึงวันที่</label>
+    <div class="date-overlay-wrap">
+      <div class="date-overlay-display"><span id="dayoff-to-display-text">เลือกวันที่</span><span>📅</span></div>
+      <input type="date" id="dayoff-to-date" class="date-overlay-input">
+    </div>
+    <div class="hint" style="margin-top:6px;">เว้นว่างไว้ = หยุดวันเดียว (ตามวันที่เริ่ม)</div>
+  </div>
+
+  <div class="field">
+    <label>หมายเหตุ</label>
+    <input type="text" id="dayoff-note" placeholder="เช่น ลากิจ, ลาป่วย (ไม่บังคับ)">
+  </div>
+
+  <button type="button" id="dayoff-save-btn">บันทึกวันหยุด</button>
+  <div id="dayoff-save-status" class="hint" style="margin-top:8px;"></div>
+
+  <div style="margin-top:22px;">
+    <div style="font-weight:700;font-size:14px;margin-bottom:8px;">วันหยุดที่ลงไว้ (ตั้งแต่วันนี้เป็นต้นไป)</div>
+    <div id="dayoff-list"><p class="hint">กำลังโหลด...</p></div>
   </div>
 </div>
 
@@ -1078,9 +1124,12 @@
 
   // กันหน้าจอค้างตลอดกาล (เช่น "กำลังส่ง...") ถ้าเน็ตมือถือ/เว็บวิวไลน์ค้างระหว่างรอผลลัพธ์ - fetch เฉยๆ ไม่มี timeout ในตัว
   // ถ้าเซิร์ฟเวอร์ทำสำเร็จแล้ว (เช่นแจ้งไลน์ไปแล้ว) แต่ browser ไม่ได้รับ response กลับมา ปุ่มจะค้างอยู่แบบนั้นตลอดไปโดยไม่มี error ให้เห็นเลย
-  async function fetchWithTimeout(url, options) {
+  // timeoutMs: ปรับได้ต่อการเรียก (default 20 วิ) - การ "โหลดข้อมูลมาอ่าน" (GET) ยืดเวลาได้ปลอดภัยกว่าการ "บันทึก" (POST)
+  // เพราะโหลดซ้ำไม่ทำให้ข้อมูลซ้ำซ้อน ต่างจาก POST ที่ต้องรีบตัดเพื่อเตือนผู้ใช้ไม่ให้กดซ้ำจนได้คำขอซ้ำสอง (2026-08-10)
+  const LOAD_TIMEOUT_MS = 40000; // ใช้กับ GET ที่โหลดข้อมูลหนักๆ (รายการคำขอ/สรุปส่งกลุ่มคนขับ)
+  async function fetchWithTimeout(url, options, timeoutMs) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20000); // 20 วิ
+    const timer = setTimeout(() => controller.abort(), timeoutMs || 20000);
     try {
       return await fetch(url, Object.assign({}, options, { signal: controller.signal }));
     } finally {
@@ -1092,7 +1141,7 @@
   // (ไม่ใช่แค่บอกว่า "พัง" เฉยๆ เดี๋ยวคนกดซ้ำแล้วได้คำขอซ้ำสอง)
   function friendlyErrorMessage(err) {
     if (err && err.name === 'AbortError') {
-      return 'การเชื่อมต่อช้าเกินไป (รอเกิน 20 วิ) ระบบอาจบันทึกไปแล้วหรือยังก็ได้ กรุณาเช็คในแท็บ "คำขอของฉัน" ก่อนลองใหม่ อย่ากดซ้ำทันที';
+      return 'การเชื่อมต่อช้าเกินไป ระบบอาจบันทึกไปแล้วหรือยังก็ได้ กรุณาเช็คในแท็บ "คำขอของฉัน" ก่อนลองใหม่ อย่ากดซ้ำทันที';
     }
     return err && err.message ? err.message : String(err);
   }
@@ -1112,6 +1161,7 @@
   let currentAssignMaterial = ''; // วัสดุของคำขอที่กำลังจัดคิวอยู่ ใช้เช็คว่ารถคันที่เลือกวิ่งวัสดุนี้ได้ไหม
   let currentAssignDate = ''; // วันเริ่มงานของคำขอที่กำลังจัดคิวอยู่ ใช้เช็คว่ารถคันไหนถูกจัดไปหน้างานอื่นแล้วในวันเดียวกัน
   let currentAssignConflicts = {}; // { "ทะเบียนรถ": ["หน้างานอื่นที่ถูกจัดไปแล้ว", ...] } โหลดจาก getTruckAssignmentsForDate
+  let currentAssignDayOffPlates = {}; // { "ทะเบียนรถ": "หมายเหตุวันหยุด" } คนขับที่ลงวันหยุดไว้ตรงวันเริ่มงานของคำขอที่กำลังจัด (2026-08-10)
 
   // ---------- LIFF init ----------
   async function initLiff() {
@@ -1200,6 +1250,7 @@
       if (result.status === 'ok' && result.isDispatcher) {
         isDispatcherUser = true;
         document.getElementById('dispatch-tab-btn').style.display = '';
+        document.getElementById('dayoff-tab-btn').style.display = ''; // แท็บวันหยุด - ฝ่ายจัดคิวเท่านั้น (2026-08-10)
         loadDrivers();
       }
     } catch (err) {
@@ -1713,6 +1764,76 @@
     });
   });
 
+  // คำเตือน "งานนี้จัดรถไว้ แต่คนขับลงวันหยุดไว้ตรงกัน" (2026-08-10) - { requestId: [{plate, driverName, date, note}] }
+  // โหลดแยกจากรายการคำขอหลัก แล้วค่อยแปะป้ายเตือนเข้าไปในการ์ดที่เรนเดอร์ไว้แล้ว (การ์ดไม่ต้องรอข้อมูลส่วนนี้ก่อนแสดง)
+  let dayOffConflicts = {};
+
+  async function loadDayOffConflicts() {
+    try {
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=dayOffConflicts&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''), undefined, LOAD_TIMEOUT_MS);
+      const result = await res.json();
+      if (result.status !== 'ok') return;
+      dayOffConflicts = result.conflicts || {};
+      applyDayOffConflictBadges();
+    } catch (err) {
+      console.error('โหลดคำเตือนวันหยุดไม่สำเร็จ', err); // เงียบๆ พอ - ไม่ใช่ข้อมูลหลักของหน้านี้
+    }
+  }
+
+  // แปะป้ายเตือน + ปุ่ม "เอารถคันนี้ออก" เข้าไปในการ์ดงานที่มีการชนกับวันหยุด
+  function applyDayOffConflictBadges() {
+    document.querySelectorAll('[data-dayoff-warn]').forEach(el => el.remove()); // ล้างของรอบก่อนกันซ้อน
+    Object.keys(dayOffConflicts).forEach(requestId => {
+      const card = document.querySelector(`.request-card[data-request-id="${cssEscapeAttr(requestId)}"]`);
+      if (!card) return;
+      const actions = card.querySelector('.card-actions');
+      if (!actions) return;
+
+      dayOffConflicts[requestId].forEach(c => {
+        const warn = document.createElement('div');
+        warn.setAttribute('data-dayoff-warn', '1');
+        warn.style.cssText = 'background:#fdecea;border:1px solid #f5c2bd;color:#c0392b;border-radius:8px;padding:8px 10px;margin:8px 0 0;font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;';
+        warn.innerHTML = `
+          <span style="flex:1;min-width:170px;">🚫 <strong>${escapeHtml(c.plate)}</strong> — ${escapeHtml(c.driverName)} ลงวันหยุดไว้วันที่ ${escapeHtml(c.date)}${c.note ? ' (' + escapeHtml(c.note) + ')' : ''}</span>
+          <button type="button" class="dayoff-remove-truck-btn" style="flex:0 0 auto;min-width:0;width:auto;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:white;border:1px solid #c0392b;color:#c0392b;">เอารถคันนี้ออก</button>
+        `;
+        warn.querySelector('.dayoff-remove-truck-btn').addEventListener('click', () => removeTruckForDayOff(requestId, c));
+        actions.parentNode.insertBefore(warn, actions);
+      });
+    });
+  }
+
+  // escape ค่าที่จะใส่ใน attribute selector ของ querySelector (requestId เป็น UUID/รหัสที่อาจมีอักขระพิเศษ)
+  function cssEscapeAttr(str) {
+    return String(str).replace(/["\\]/g, '\\$&');
+  }
+
+  function removeTruckForDayOff(requestId, c) {
+    if (!confirm(`เอา ${c.plate} (${c.driverName}) ออกจากงานนี้?\n\nคนขับลงวันหยุดไว้วันที่ ${c.date}`)) return;
+    runOnce('removeTruck:' + requestId + ':' + c.plate, async () => {
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'removeTruckFromAssignment',
+            lineUserId: lineProfile ? lineProfile.userId : '',
+            requestId: requestId,
+            plate: c.plate
+          })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        alert(result.remainingCount === 0
+          ? 'เอารถออกแล้ว — ตอนนี้งานนี้ยังไม่มีรถเลย อย่าลืมจัดรถคันใหม่ให้'
+          : 'เอารถออกแล้ว');
+        loadPendingRequests();
+      } catch (err) {
+        alert('เอารถออกไม่สำเร็จ: ' + friendlyErrorMessage(err));
+      }
+    });
+  }
+
   // ---------- แท็บ "จัดคิว" (เฉพาะฝ่ายจัดคิว) ----------
   // แสดง 2 กลุ่ม: "รอจัดคิว" (จัดคิวครั้งแรก) และ "จัดคิวแล้ว" (แก้ไขคนขับ/ทะเบียนรถ หรือยกเลิกได้จากตรงนี้เลย ไม่ต้องเข้าชีต)
   async function loadPendingRequests() {
@@ -1720,9 +1841,13 @@
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
 
     try {
-      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=pendingRequests&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''));
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=pendingRequests&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''), undefined, LOAD_TIMEOUT_MS);
       const result = await res.json();
       if (result.status !== 'ok') throw new Error(result.message);
+
+      // โหลดคำเตือน "วันหยุดชนกับงานที่จัดคิวไว้" คู่ขนานไปเลย (2026-08-10) - ไม่ await รวมกับ list หลัก และไม่ throw ถ้าพลาด
+      // เพราะเป็นข้อมูลเสริม ไม่ควรทำให้รายการคำขอทั้งหน้าโหลดไม่ขึ้นถ้าส่วนนี้มีปัญหา (แพทเทิร์นเดียวกับ loadAssignConflicts)
+      loadDayOffConflicts();
 
       const pending = result.requests.filter(r => r.status === 'รอจัดคิว');
       const queued = result.requests.filter(r => r.status === 'จัดคิวแล้ว');
@@ -1789,6 +1914,7 @@
   function buildQueuedCard(r) {
     const card = document.createElement('div');
     card.className = 'request-card';
+    card.dataset.requestId = r.requestId; // ให้ applyDayOffConflictBadges หาการ์ดนี้เจอเพื่อแปะป้ายเตือนวันหยุด (2026-08-10)
     const isPaused = r.progressStatus === 'พักส่งชั่วคราว'; // 2026-07-23
     const pauseResumeBtn = isPaused
       ? `<button class="btn-small resume-btn dispatch-resume-btn">▶️ ส่งต่อ</button>`
@@ -1850,6 +1976,7 @@
     currentAssignMaterial = material || '';
     currentAssignDate = startDate || '';
     currentAssignConflicts = {};
+    currentAssignDayOffPlates = {}; // ล้างของคำขอก่อนหน้า กันเตือนผิดคำขอ (2026-08-10)
     document.getElementById('assign-filter-input').value = '';
     document.getElementById('assign-custom-input').value = '';
     document.getElementById('assign-truck-hint').textContent =
@@ -1906,6 +2033,7 @@
       // ถ้าผู้ใช้ปิด/เปลี่ยน modal ไปแล้วก่อนโหลดเสร็จ ไม่ต้อง apply ทับของคำขออื่น
       if (assigningRequestId !== requestId) return;
       currentAssignConflicts = data.assignments || {};
+      currentAssignDayOffPlates = data.dayOffPlates || {}; // ทะเบียนที่คนขับลงวันหยุดไว้ตรงวันเริ่มงานนี้ (2026-08-10)
       renderAssignCheckboxList(document.getElementById('assign-filter-input').value);
     } catch (err) {
       // เงียบไว้พอ - เป็นแค่ตัวเตือนเสริม ไม่ใช่ข้อมูลที่ critical ต่อการจัดคิว
@@ -1954,13 +2082,18 @@
       // รถคันนี้ถูกจัดคิวไปหน้างานอื่นไว้แล้วในวันเดียวกันหรือไม่ (จาก currentAssignConflicts ที่โหลดตอนเปิด modal - key เป็นทะเบียนรถ)
       const conflictSites = currentAssignConflicts[extractPlate(driver.label)] || [];
       const doubleBooked = conflictSites.length > 0;
+      // คนขับคันนี้ลงวันหยุดไว้ตรงกับวันเริ่มงานของคำขอนี้หรือไม่ (2026-08-10) - เตือนอย่างเดียว ไม่บล็อก
+      // เหมือนคำเตือนวัสดุ/รถซ้ำ เพราะบางครั้งคนขับยอมมาทำงานในวันหยุดจริงๆ ให้คนจัดคิวตัดสินใจเอง
+      const isDayOff = Object.prototype.hasOwnProperty.call(currentAssignDayOffPlates, extractPlate(driver.label));
+      const dayOffNote = isDayOff ? currentAssignDayOffPlates[extractPlate(driver.label)] : '';
       const row = document.createElement('label');
-      row.className = 'assign-check-row' + (risky || doubleBooked ? ' risky' : '');
+      row.className = 'assign-check-row' + (risky || doubleBooked || isDayOff ? ' risky' : '');
       row.innerHTML = `
         <input type="checkbox" ${selectedDriverLabels.has(driver.label) ? 'checked' : ''}>
         <div>
           <div>${escapeHtml(driver.label)}</div>
           ${driver.note ? `<div class="assign-check-note">${escapeHtml(driver.note)}</div>` : ''}
+          ${isDayOff ? `<div class="assign-check-warn">🚫 ลงวันหยุดไว้วันนี้${dayOffNote ? ' (' + escapeHtml(dayOffNote) + ')' : ''}</div>` : ''}
           ${risky ? `<div class="assign-check-warn">⚠️ ปกติไม่วิ่งวัสดุนี้ (${escapeHtml(driver.exclude.join(', '))})</div>` : ''}
           ${doubleBooked ? `<div class="assign-check-warn">⚠️ ถูกจัดคิวไปหน้างาน "${escapeHtml(conflictSites.join(', '))}" แล้ว (วันเดียวกัน)</div>` : ''}
         </div>
@@ -2242,7 +2375,7 @@
     container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
 
     try {
-      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=dailySummary&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') + '&date=' + encodeURIComponent(date));
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=dailySummary&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : '') + '&date=' + encodeURIComponent(date), undefined, LOAD_TIMEOUT_MS);
       const result = await res.json();
       if (result.status !== 'ok') throw new Error(result.message);
       currentSummaryData = result;
@@ -2597,6 +2730,118 @@
   }
 
   // ปุ่ม/โมดัล "แก้หน้างานวันนี้" ถูกถอดออกแล้ว (2026-08-05) - ดูหมายเหตุที่จุดที่เคยมีโมดัลนี้ใน HTML ด้านบน (เหตุผลเดียวกัน)
+
+  // ---------- แท็บวันหยุดคนขับ (ฝ่ายจัดคิว) - 2026-08-10 ----------
+  let dayOffDriverNames = []; // เติมจาก action=driverDayOffs (ส่งมาพร้อมกันเลย ไม่ต้องยิง action=drivers ซ้ำ)
+
+  async function loadDayOffs() {
+    const container = document.getElementById('dayoff-list');
+    container.innerHTML = '<p class="hint">กำลังโหลด...</p>';
+    try {
+      const res = await fetchWithTimeout(APPS_SCRIPT_URL + '?action=driverDayOffs&userId=' + encodeURIComponent(lineProfile ? lineProfile.userId : ''), undefined, LOAD_TIMEOUT_MS);
+      const result = await res.json();
+      if (result.status !== 'ok') throw new Error(result.message);
+
+      dayOffDriverNames = result.driverNames || [];
+      renderDayOffList(result.dayOffs || []);
+    } catch (err) {
+      container.innerHTML = '<p class="hint" style="color:var(--error);">โหลดไม่สำเร็จ: ' + escapeHtml(friendlyErrorMessage(err)) + '</p>';
+    }
+  }
+
+  function renderDayOffList(dayOffs) {
+    const container = document.getElementById('dayoff-list');
+    if (dayOffs.length === 0) {
+      container.innerHTML = '<p class="hint">ยังไม่มีวันหยุดที่ลงไว้</p>';
+      return;
+    }
+    container.innerHTML = '';
+    dayOffs.forEach(d => {
+      const card = document.createElement('div');
+      card.className = 'request-card';
+      const rangeText = (d.fromDate === d.toDate)
+        ? formatThaiDateShort(d.fromDate)
+        : `${formatThaiDateShort(d.fromDate)} - ${formatThaiDateShort(d.toDate)}`;
+      card.innerHTML = `
+        <div><strong>${escapeHtml(d.driverName)}</strong></div>
+        <div class="hint">📅 ${escapeHtml(rangeText)}</div>
+        ${d.note ? `<div class="hint">📝 ${escapeHtml(d.note)}</div>` : ''}
+        <div class="card-actions">
+          <button class="btn-small cancel-btn dayoff-delete-btn">ลบ</button>
+        </div>
+      `;
+      card.querySelector('.dayoff-delete-btn').addEventListener('click', () => deleteDayOff(d));
+      container.appendChild(card);
+    });
+  }
+
+  function deleteDayOff(d) {
+    if (!confirm(`ลบวันหยุดของ ${d.driverName} (${d.fromDate}${d.toDate !== d.fromDate ? ' - ' + d.toDate : ''})?`)) return;
+    runOnce('deleteDayOff:' + d.dayOffId, async () => {
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'deleteDriverDayOff',
+            lineUserId: lineProfile ? lineProfile.userId : '',
+            dayOffId: d.dayOffId
+          })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        loadDayOffs();
+      } catch (err) {
+        alert('ลบไม่สำเร็จ: ' + friendlyErrorMessage(err));
+      }
+    });
+  }
+
+  document.getElementById('dayoff-save-btn').addEventListener('click', () => {
+    const driverName = document.getElementById('dayoff-driver-input').value.trim();
+    const fromDate = document.getElementById('dayoff-from-date').value;
+    const toDate = document.getElementById('dayoff-to-date').value;
+    const note = document.getElementById('dayoff-note').value.trim();
+    const statusEl = document.getElementById('dayoff-save-status');
+
+    if (!driverName) { statusEl.textContent = 'กรุณาเลือกคนขับ'; statusEl.style.color = 'var(--error)'; return; }
+    if (!fromDate) { statusEl.textContent = 'กรุณาเลือกวันที่เริ่ม'; statusEl.style.color = 'var(--error)'; return; }
+    if (toDate && toDate < fromDate) { statusEl.textContent = 'วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม'; statusEl.style.color = 'var(--error)'; return; }
+
+    const btn = document.getElementById('dayoff-save-btn');
+    runOnce('saveDayOff:' + driverName + ':' + fromDate, async () => {
+      const originalText = btn.textContent;
+      btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+      statusEl.textContent = '';
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'saveDriverDayOff',
+            lineUserId: lineProfile ? lineProfile.userId : '',
+            driverName: driverName,
+            fromDate: fromDate,
+            toDate: toDate || fromDate,
+            note: note
+          })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        statusEl.textContent = 'บันทึกวันหยุดเรียบร้อย';
+        statusEl.style.color = 'var(--primary-dark)';
+        // เคลียร์ฟอร์มให้พร้อมกรอกคนถัดไป (คนจัดคิวมักลงหลายคนติดกัน) แต่คงวันที่ไว้ เผื่อลงวันเดียวกันหลายคน
+        document.getElementById('dayoff-driver-input').value = '';
+        document.getElementById('dayoff-note').value = '';
+        loadDayOffs();
+      } catch (err) {
+        statusEl.textContent = 'บันทึกไม่สำเร็จ: ' + friendlyErrorMessage(err);
+        statusEl.style.color = 'var(--error)';
+      } finally {
+        btn.disabled = false; btn.textContent = originalText;
+      }
+    });
+  });
 
   // ---------- บันทึกการวิ่ง (คนขับ) ----------
   let driverJobsData = [];
@@ -3301,6 +3546,7 @@
       if (btn.dataset.tab === 'driver-log-view') loadDriverJobs();
       if (btn.dataset.tab === 'trip-history-view') loadTripHistory();
       if (btn.dataset.tab === 'odometer-view') initOdometerSections();
+      if (btn.dataset.tab === 'dayoff-view') loadDayOffs();
     });
   });
 
@@ -3311,6 +3557,9 @@
   setupSearchable('source-input', 'source-list', () => optionsData.sources);
   setupSearchable('driver-log-material-input', 'driver-log-material-list', () => optionsData.materials);
   setupSearchable('trip-history-material-input', 'trip-history-material-list', () => optionsData.materials);
+  setupSearchable('dayoff-driver-input', 'dayoff-driver-list', () => dayOffDriverNames);
+  wireDateOverlay('dayoff-from-date', 'dayoff-from-display-text', null, null);
+  wireDateOverlay('dayoff-to-date', 'dayoff-to-display-text', null, null);
 
   initLiff();
   loadOptions();
