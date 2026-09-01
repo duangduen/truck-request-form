@@ -358,6 +358,34 @@
   .trip-job-progress { font-size: 13px; color: var(--muted, #666); margin-top: 4px; }
   .trip-job-card.status-job-card { border-style: dashed; } /* งานที่ไม่มีคำขอในระบบ (เข้าแพล้นท์/แพล้นท์ยาง/ไปหน้างานนอกระบบ) - เส้นประให้ต่างจากงานจากคำขอจริง (2026-08-05) */
 
+  /* หน้างานอื่นที่ไปวิ่งเสริมได้ (2026-08-11) - แถบส้มด้านซ้าย ให้เห็นชัดว่าไม่ใช่งานที่จัดคิวให้ตัวเอง */
+  .trip-job-card.other-job-card { border-left: 4px solid #e8a33d; background: #fffdf7; }
+  .other-job-toggle {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 11px;
+    border-radius: 10px;
+    border: 1px dashed #e0a530;
+    background: #fff9ec;
+    color: #a1671b;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  #driver-log-other-search {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 10px;
+    font-size: 14px;
+    font-family: inherit;
+    margin: 8px 0;
+    box-sizing: border-box;
+  }
+  #driver-log-other-job-list { max-height: 50vh; overflow-y: auto; }
+
   /* แถวรูปตั๋วที่แนบไว้ (บันทึกการวิ่ง/ประวัติการวิ่ง) - รองรับหลายรูป กดลบทีละรูปได้ก่อนบันทึก (2026-08-05) */
   .photo-thumb-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .photo-thumb { position: relative; width: 72px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
@@ -603,6 +631,50 @@
     padding: 2px 10px;
     font-size: 12px;
     font-weight: 700;
+  }
+  /* กล่องหมายเหตุถึงคนขับต่อหน้างาน ในสรุปส่งกลุ่มคนขับ (2026-08-11) */
+  .job-note-wrap { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+  .job-note-label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .job-note-input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-family: inherit;
+    background: white;
+    box-sizing: border-box;
+  }
+  .job-note-status { font-size: 12px; margin-left: 2px; }
+
+  /* ช่องค้นหาในหัวรายการติ๊ก - ต้องใส่กรอบเอง เพราะ input ตรงนี้ไม่ได้ห่อด้วย .field (CSS กลางตั้ง border:none ไว้) */
+  .dayoff-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--card);
+  }
+  #dayoff-search {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  #dayoff-search-clear {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    padding: 7px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
   }
   #dayoff-checklist { max-height: 46vh; overflow-y: auto; }
   .dayoff-check-row {
@@ -891,6 +963,12 @@
       <span>ติ๊กคนที่หยุดวันนี้</span>
       <span id="dayoff-checked-count" class="dayoff-count-badge">0 คน</span>
     </div>
+    <!-- ค้นหาชื่อ/ทะเบียน (2026-08-11 ตามที่คนจัดคิวขอ - รายชื่อ 26 คัน ไล่หาทีละแถวช้า) - กรองฝั่งแอปอย่างเดียว
+         ไม่ยิงเซิร์ฟเวอร์ใหม่ และไม่ล้างสิ่งที่ติ๊กไว้ (สถานะติ๊กเก็บใน dayOffDrivers ไม่ได้อยู่ใน DOM) -->
+    <div class="dayoff-search-wrap">
+      <input type="text" id="dayoff-search" placeholder="🔍 พิมพ์ค้นหาชื่อ หรือ ทะเบียนรถ" autocomplete="off">
+      <button type="button" id="dayoff-search-clear" title="ล้างคำค้นหา">✕</button>
+    </div>
     <div id="dayoff-checklist"><p class="hint">กำลังโหลด...</p></div>
   </div>
 
@@ -920,6 +998,17 @@
   <div id="driver-log-status-job-section" style="display:none;">
     <div class="hint" style="margin-top:4px;">งานอื่นๆ ที่ได้รับมอบหมาย (ไม่มีคำขอในระบบ - เข้าแพล้นท์/แพล้นท์ยาง/ไปหน้างานที่ฝ่ายจัดคิวสั่งตรง)</div>
     <div id="driver-log-status-job-list"></div>
+  </div>
+
+  <!-- หน้างานอื่นที่ไม่ได้จัดคิวให้คันนี้ แต่ไปวิ่งเสริมได้ถ้ามีเวลาเหลือ (2026-08-11 ตามที่คนขับขอ) -->
+  <!-- ซ่อนไว้ใต้ปุ่ม "แสดง" เพราะลิสต์นี้ยาว (ทุกงานที่เปิดอยู่ในวันนั้น) และเป็นกรณีรอง ไม่ใช่งานหลักของคนขับ -->
+  <div id="driver-log-other-job-section" style="display:none;">
+    <button type="button" id="driver-log-other-toggle" class="other-job-toggle">➕ วิ่งเสริมหน้างานอื่น (แตะเพื่อดูรายการ)</button>
+    <div id="driver-log-other-job-wrap" style="display:none;">
+      <div class="hint" style="margin-top:6px;">หน้างานเหล่านี้ไม่ได้จัดคิวให้รถคุณ เลือกได้เฉพาะกรณีไปวิ่งช่วยจริงๆ — ระบบจะบันทึกให้ตามที่เลือก</div>
+      <input type="text" id="driver-log-other-search" placeholder="🔍 พิมพ์ค้นหาชื่อหน้างาน" autocomplete="off">
+      <div id="driver-log-other-job-list"></div>
+    </div>
   </div>
 
   <div id="driver-log-form" style="display:none;">
@@ -2592,6 +2681,26 @@
         ${materialsHtml}
         ${reconfirmNote}
       `;
+
+      // กล่องหมายเหตุถึงคนขับของหน้างานนี้ (2026-08-11 ตามที่คนจัดคิวขอ) - เช่น "ให้ไปนอนหน้างาน"
+      // บันทึกตอน blur (ออกจากช่อง) แทนที่จะมีปุ่มแยก ลดจำนวนคลิก และยิงเฉพาะตอนค่าเปลี่ยนจริงเท่านั้น
+      const noteWrap = document.createElement('div');
+      noteWrap.className = 'job-note-wrap';
+      noteWrap.innerHTML = `
+        <label class="job-note-label">📝 หมายเหตุถึงคนขับ (จะแนบไปในข้อความที่ส่งเข้ากลุ่ม)</label>
+        <input type="text" class="job-note-input" placeholder="เช่น ให้ไปนอนหน้างาน, เริ่มงาน 05:00 น." value="${escapeHtml(g.jobNote || '')}">
+        <span class="job-note-status"></span>
+      `;
+      const noteInput = noteWrap.querySelector('.job-note-input');
+      const noteStatus = noteWrap.querySelector('.job-note-status');
+      let lastSavedNote = g.jobNote || '';
+      noteInput.addEventListener('blur', () => {
+        const val = noteInput.value.trim();
+        if (val === lastSavedNote) return; // ไม่เปลี่ยน ไม่ต้องยิง
+        saveJobNote(summary.date || currentSummaryDate, g.site, val, noteStatus, () => { lastSavedNote = val; });
+      });
+      card.appendChild(noteWrap);
+
       container.appendChild(card);
     });
 
@@ -2703,6 +2812,41 @@
   // ปรับให้ compact ขึ้นตามที่คนจัดขอ (2026-07-19): ย่อข้อความความคืบหน้างาน, รวมสถานะอื่นๆ เป็นหมวดเดียว ใส่ไอคอนกำกับทีละบรรทัดแทน
   // (ทดลองตัดบรรทัดว่างคั่นกลุ่มออกไปก่อน แต่พอเห็นของจริงหลายกลุ่มแล้วอ่านยาก เลยใส่กลับคืนมา - 2026-07-19)
   // ต้องตรงกับ buildDailySummaryText_ ใน Code.gs ทุกประการ
+  // บันทึกหมายเหตุถึงคนขับของ (วันที่ + หน้างาน) - เรียกตอน blur ออกจากช่อง (2026-08-11)
+  // อัปเดต currentSummaryData ในเครื่องด้วย เพื่อให้ปุ่ม "ดูข้อความที่จะส่ง" แสดงหมายเหตุใหม่ทันทีโดยไม่ต้องโหลดใหม่ทั้งหน้า
+  function saveJobNote(date, site, note, statusEl, onSaved) {
+    statusEl.textContent = 'กำลังบันทึก...';
+    statusEl.style.color = 'var(--text-muted)';
+    runOnce('jobNote:' + date + ':' + site, async () => {
+      try {
+        const res = await fetchWithTimeout(APPS_SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'saveJobNote',
+            lineUserId: lineProfile ? lineProfile.userId : '',
+            date: date,
+            site: site,
+            note: note
+          })
+        });
+        const result = await res.json();
+        if (result.status !== 'ok') throw new Error(result.message);
+        statusEl.textContent = '✓ บันทึกแล้ว';
+        statusEl.style.color = 'var(--primary-dark)';
+        if (currentSummaryData && currentSummaryData.siteGroups) {
+          const g = currentSummaryData.siteGroups.find(x => x.site === site);
+          if (g) g.jobNote = note;
+        }
+        if (onSaved) onSaved();
+        setTimeout(() => { statusEl.textContent = ''; }, 2500);
+      } catch (err) {
+        statusEl.textContent = 'บันทึกไม่สำเร็จ';
+        statusEl.style.color = 'var(--error)';
+      }
+    });
+  }
+
   function buildSummaryPreviewText(summary) {
     const dayBadge = getThaiDayBadge(summary.date);
     const lines = [`${dayBadge.emoji} สรุปคิวรถ วัน${dayBadge.name}ที่ ${summary.date}`, ''];
@@ -2713,6 +2857,7 @@
         if (m.material) lines.push(`🪨 ${m.material}${mDayLabel}`);
         lines.push(`🚛 ${formatTruckList(m.trucks.map(extractPlate))}`); // ในข้อความส่งกลุ่มคนขับ โชว์แค่ทะเบียน ไม่โชว์ชื่อคนขับ (2026-07-19)
       });
+      if (g.jobNote) lines.push(`📝 ${g.jobNote}`); // ต้องตรงกับ buildDailySummaryText_ ฝั่ง Code.gs (2026-08-11)
       lines.push('');
     });
     const manualSiteGroups = {};
@@ -2929,8 +3074,21 @@
       updateDayOffCount();
       return;
     }
+    // กรองด้วยคำค้นหา (ชื่อ หรือ ทะเบียน) - เก็บ index เดิมไว้อ้างอิง dayOffDrivers เสมอ ไม่ใช้ index ของลิสต์ที่กรองแล้ว
+    // ไม่งั้นพอกรองอยู่แล้วติ๊ก จะไปติ๊กโดนคนผิด (บั๊กคลาสสิกของการ render ลิสต์ที่ถูก filter)
+    const q = (document.getElementById('dayoff-search').value || '').trim().toLowerCase();
+    const visible = dayOffDrivers
+      .map((d, idx) => ({ d, idx }))
+      .filter(({ d }) => !q || String(d.name || '').toLowerCase().includes(q) || String(d.plate || '').toLowerCase().includes(q));
+
+    if (visible.length === 0) {
+      container.innerHTML = '<p class="hint" style="padding:12px;">ไม่พบชื่อ/ทะเบียนที่ตรงกับคำค้นหา</p>';
+      updateDayOffCount();
+      return;
+    }
+
     container.innerHTML = '';
-    dayOffDrivers.forEach((d, idx) => {
+    visible.forEach(({ d, idx }) => {
       const row = document.createElement('label');
       row.className = 'dayoff-check-row' + (d.checked ? ' checked' : '') + (d.lockedByRange ? ' locked' : '');
       row.innerHTML = `
@@ -2953,9 +3111,16 @@
   }
 
   function updateDayOffCount() {
+    // นับจากข้อมูลทั้งหมดเสมอ ไม่ใช่เฉพาะที่มองเห็นหลังกรอง - ไม่งั้นพอค้นหาแล้วตัวเลขจะหายไปทั้งที่ยังติ๊กไว้อยู่
     const n = dayOffDrivers.filter(d => d.checked).length;
     document.getElementById('dayoff-checked-count').textContent = n + ' คน';
   }
+
+  document.getElementById('dayoff-search').addEventListener('input', renderDayOffChecklist);
+  document.getElementById('dayoff-search-clear').addEventListener('click', () => {
+    document.getElementById('dayoff-search').value = '';
+    renderDayOffChecklist();
+  });
 
   function syncDayOffDate() {
     const v = document.getElementById('dayoff-date').value;
@@ -3126,11 +3291,15 @@
       // (2026-08-05) - เก็บ index ในอาเรย์รวมนี้ตรงๆ เพื่อให้ selectTripJob(idx) ใช้ตัวเดียวกับทั้งสองประเภทงานได้เลย
       const formalJobs = result.jobs || [];
       const statusJobs = result.statusJobs || [];
-      driverJobsData = formalJobs.concat(statusJobs);
+      const otherJobs = result.otherJobs || []; // หน้างานอื่นที่ไปวิ่งเสริมได้ (2026-08-11)
+      // ลำดับใน driverJobsData ต้องตรงกับลำดับการ์ดใน DOM เสมอ (job-list -> status-job-list -> other-job-list)
+      // เพราะ selectTripJob(idx) อ้างอิง index ร่วมกันทั้งสามลิสต์ผ่าน driverJobCardEls()
+      driverJobsData = formalJobs.concat(statusJobs).concat(otherJobs);
 
       const statusSection = document.getElementById('driver-log-status-job-section');
       const statusListEl = document.getElementById('driver-log-status-job-list');
       statusListEl.innerHTML = '';
+      renderOtherJobs(otherJobs);
 
       if (driverJobsData.length === 0) {
         container.innerHTML = '<p class="hint">ไม่มีงานหน่วย "เที่ยว"/"พ่วง"/"เทเลอร์" ที่ถูกจัดคิวให้ทะเบียน ' + escapeHtml(result.plate || '') + ' ในวันที่เลือก</p>';
@@ -3143,6 +3312,7 @@
         const idx = driverJobsData.indexOf(job);
         const card = document.createElement('div');
         card.className = 'trip-job-card';
+        card.dataset.jobIdx = idx;
         card.innerHTML = `
           <div>🚧 ${escapeHtml(job.site)}</div>
           ${job.material ? `<div class="trip-job-progress">🪨 ${escapeHtml(job.material)}</div>` : ''}
@@ -3157,6 +3327,7 @@
         const idx = driverJobsData.indexOf(job);
         const card = document.createElement('div');
         card.className = 'trip-job-card status-job-card';
+        card.dataset.jobIdx = idx;
         card.innerHTML = `
           <div>📋 ${escapeHtml(job.site)}</div>
           <div class="trip-job-progress">บันทึกไปแล้ว ${job.loggedSoFar} ${escapeHtml(job.unit || 'เที่ยว')}</div>
@@ -3165,22 +3336,72 @@
         statusListEl.appendChild(card);
       });
 
-      if (driverJobsData.length === 1) selectTripJob(0); // มีงานเดียว เลือกให้อัตโนมัติ ลดขั้นตอนคนขับ
+      // เลือกให้อัตโนมัติเฉพาะกรณีมีงานของตัวเองงานเดียวจริงๆ - ไม่นับ otherJobs (เป็นงานคนอื่น ต้องให้เลือกเองเสมอ)
+      if (formalJobs.length + statusJobs.length === 1) selectTripJob(0);
     } catch (err) {
       container.innerHTML = '<p class="hint" style="color:#d64545">โหลดไม่สำเร็จ: ' + friendlyErrorMessage(err) + '</p>';
       document.getElementById('driver-log-status-job-section').style.display = 'none';
+      document.getElementById('driver-log-other-job-section').style.display = 'none';
     }
   }
+
+  // รายการ "หน้างานอื่น" ที่ไปวิ่งเสริมได้ (2026-08-11) - เก็บไว้ใน closure ของ loadDriverJobs ไม่ได้ เพราะช่องค้นหาต้อง re-render
+  let driverOtherJobsData = [];
+  function renderOtherJobs(otherJobs) {
+    driverOtherJobsData = otherJobs || [];
+    const section = document.getElementById('driver-log-other-job-section');
+    section.style.display = driverOtherJobsData.length > 0 ? '' : 'none';
+    if (driverOtherJobsData.length === 0) return;
+    renderOtherJobList();
+  }
+
+  function renderOtherJobList() {
+    const listEl = document.getElementById('driver-log-other-job-list');
+    const q = (document.getElementById('driver-log-other-search').value || '').trim().toLowerCase();
+    listEl.innerHTML = '';
+    // ต้องหา index จาก driverJobsData (ลิสต์รวม) เสมอ ไม่ใช่ index ของลิสต์ที่กรองแล้ว ไม่งั้นกรองอยู่แล้วแตะจะเลือกโดนงานผิด
+    const visible = driverOtherJobsData.filter(j => !q || String(j.site || '').toLowerCase().includes(q) || String(j.material || '').toLowerCase().includes(q));
+    if (visible.length === 0) {
+      listEl.innerHTML = '<p class="hint">ไม่พบหน้างานที่ตรงกับคำค้นหา</p>';
+      return;
+    }
+    visible.forEach(job => {
+      const idx = driverJobsData.indexOf(job);
+      const card = document.createElement('div');
+      card.className = 'trip-job-card other-job-card';
+      card.dataset.jobIdx = idx;
+      card.innerHTML = `
+        <div>🚧 ${escapeHtml(job.site)}</div>
+        ${job.material ? `<div class="trip-job-progress">🪨 ${escapeHtml(job.material)}</div>` : ''}
+        <div class="trip-job-progress">วิ่งไปแล้ว ${job.loggedSoFar} / ${job.target} ${escapeHtml(job.unit || 'เที่ยว')}</div>
+        ${job.assignedTo ? `<div class="trip-job-progress" style="color:#a1671b;">🚛 ปกติจัดให้: ${escapeHtml(job.assignedTo)}</div>` : ''}
+      `;
+      card.addEventListener('click', () => { if (selectedTripJobIdx === idx) deselectTripJob(); else selectTripJob(idx); });
+      listEl.appendChild(card);
+    });
+  }
+
+  document.getElementById('driver-log-other-toggle').addEventListener('click', () => {
+    const wrap = document.getElementById('driver-log-other-job-wrap');
+    const isOpen = wrap.style.display !== 'none';
+    wrap.style.display = isOpen ? 'none' : '';
+    document.getElementById('driver-log-other-toggle').textContent = isOpen
+      ? '➕ วิ่งเสริมหน้างานอื่น (แตะเพื่อดูรายการ)'
+      : '➖ ซ่อนรายการหน้างานอื่น';
+  });
+  document.getElementById('driver-log-other-search').addEventListener('input', renderOtherJobList);
 
   // วันที่ "วันนี้" ตามเวลาไทย ในรูปแบบ yyyy-MM-dd ใช้ตั้งค่าเริ่มต้น/บนสุดของ input วันที่ (กัน device ตั้ง timezone อื่น)
   function todayBangkokDateStr() {
     return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
   }
 
-  // การ์ดงานทั้งหมด (จากคำขอจริง + จากสถานะรถประจำวัน) เรียงตามลำดับเดียวกับ driverJobsData เสมอ เพราะ #driver-log-job-list
-  // มาก่อน #driver-log-status-job-list ใน DOM และ driverJobsData = formalJobs.concat(statusJobs) (2026-08-05)
+  // การ์ดงานทั้งหมด (จากคำขอจริง + จากสถานะรถประจำวัน + หน้างานอื่นที่ไปวิ่งเสริม)
+  // **สำคัญ**: ห้ามอ้างอิงตำแหน่ง (index ที่เท่าไหร่ใน NodeList) เพื่อจับคู่กับ driverJobsData อีกต่อไป เพราะลิสต์ "หน้างานอื่น"
+  // มีช่องค้นหากรองได้ (2026-08-11) พอกรองแล้วจำนวนการ์ดใน DOM จะไม่เท่ากับจำนวนข้อมูลใน driverJobsData
+  // ทุกการ์ดจึงติด dataset.jobIdx = index จริงใน driverJobsData ไว้ แล้วจับคู่ด้วยค่านี้แทนตำแหน่ง
   function driverJobCardEls() {
-    return document.querySelectorAll('#driver-log-job-list .trip-job-card, #driver-log-status-job-list .trip-job-card');
+    return document.querySelectorAll('#driver-log-job-list .trip-job-card, #driver-log-status-job-list .trip-job-card, #driver-log-other-job-list .trip-job-card');
   }
 
   // ยกเลิกการเลือกการ์ด (แตะการ์ดที่เลือกอยู่ซ้ำ) - เอา class selected ออก ซ่อนการ์ดแก้ไข แล้วย้ายกลับตำแหน่งเดิม
@@ -3197,8 +3418,10 @@
     selectedTripJob = driverJobsData[idx];
     selectedTripJobIdx = idx;
     const cards = driverJobCardEls();
-    cards.forEach((el, i) => el.classList.toggle('selected', i === idx));
-    document.getElementById('driver-log-selected-site').textContent = (selectedTripJob.isStatusJob ? '📋 ' : '🚧 ') + selectedTripJob.site;
+    cards.forEach(el => el.classList.toggle('selected', Number(el.dataset.jobIdx) === idx));
+    document.getElementById('driver-log-selected-site').textContent =
+      (selectedTripJob.isStatusJob ? '📋 ' : (selectedTripJob.isOtherJob ? '➕ ' : '🚧 ')) + selectedTripJob.site
+      + (selectedTripJob.isOtherJob ? ' (วิ่งเสริม - ไม่ได้จัดคิวให้รถคุณ)' : '');
     document.getElementById('driver-log-selected-material').textContent =
       selectedTripJob.material ? '🪨 ' + selectedTripJob.material : '';
     const unitLabel = selectedTripJob.unit || 'เที่ยว';
@@ -3217,7 +3440,9 @@
     refreshDriverLogPhotoThumbs();
     const formEl = document.getElementById('driver-log-form');
     // ย้ายการ์ดแก้ไข/บันทึกมาแทรกต่อจากรายการที่เพิ่งเลือกทันที (แทนที่จะค้างอยู่ท้ายลิสต์เหมือนเดิม) กันหาไม่เจอเวลามีหลายรายการ
-    if (cards[idx]) cards[idx].insertAdjacentElement('afterend', formEl);
+    // หาการ์ดจาก dataset.jobIdx ไม่ใช่ตำแหน่งใน NodeList (ลิสต์ "หน้างานอื่น" กรองด้วยคำค้นหาได้ ตำแหน่งจึงเลื่อนไม่ตรงกับข้อมูล)
+    const selectedCard = Array.prototype.find.call(cards, el => Number(el.dataset.jobIdx) === idx);
+    if (selectedCard) selectedCard.insertAdjacentElement('afterend', formEl);
     formEl.style.display = '';
     formEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     document.getElementById('driver-log-status').textContent = '';
@@ -3292,6 +3517,11 @@
     if (!material) { alert('กรุณาเลือก/พิมพ์ชนิดวัสดุที่วิ่ง'); return; } // งานจากสถานะรถประจำวันไม่มี default ต้องกรอกเองเสมอ ส่วนงานจากคำขอจริง prefill ไว้แล้วจึงไม่น่าติดข้อนี้ตามปกติ
     // ไม่บังคับแนบรูป - ใส่ทีหลังได้ที่แท็บ "ประวัติการวิ่ง" (2026-07-10)
 
+    // งาน "วิ่งเสริมหน้างานอื่น" ให้ยืนยันอีกครั้งก่อนบันทึก (2026-08-11) - เป็นงานที่ไม่ได้จัดคิวให้รถคันนี้
+    // กันกดพลาดไปบันทึกใส่งานคนอื่น ซึ่งจะทำให้ยอดเที่ยวของงานนั้นเพี้ยน
+    if (selectedTripJob.isOtherJob &&
+        !confirm(`ยืนยันบันทึกการวิ่งเสริมที่ "${selectedTripJob.site}"?\n\nหน้างานนี้ไม่ได้จัดคิวให้รถคุณ กรุณาเช็คให้แน่ใจว่าไปวิ่งช่วยงานนี้จริง`)) return;
+
     runOnce('logTrip:' + selectedTripJob.requestId, async () => {
       const btn = document.getElementById('driver-log-submit-btn');
       const statusEl = document.getElementById('driver-log-status');
@@ -3311,7 +3541,8 @@
             unit: logUnit,
             material: material,
             distanceKm: distanceKm ? Number(distanceKm) : '',
-            photos: tripPhotos
+            photos: tripPhotos,
+            isOtherJob: !!selectedTripJob.isOtherJob // ยืนยันว่าตั้งใจเลือกงานที่ไม่ได้จัดคิวให้ตัวเอง (2026-08-11)
           })
         });
         const result = await res.json();
