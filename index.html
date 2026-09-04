@@ -358,6 +358,19 @@
   .trip-job-progress { font-size: 13px; color: var(--muted, #666); margin-top: 4px; }
   .trip-job-card.status-job-card { border-style: dashed; } /* งานที่ไม่มีคำขอในระบบ (เข้าแพล้นท์/แพล้นท์ยาง/ไปหน้างานนอกระบบ) - เส้นประให้ต่างจากงานจากคำขอจริง (2026-08-05) */
 
+  /* หมายเหตุจากฝ่ายจัดคิวที่ส่งถึงคนขับ (2026-08-11) - เน้นให้เด่นกว่าบรรทัดข้อมูลทั่วไป เพราะเป็นคำสั่งเฉพาะกิจของวันนั้น
+     เช่น "ให้ไปนอนหน้างาน" ถ้ากลืนไปกับข้อความอื่นคนขับจะเลื่อนผ่าน */
+  .job-note-badge {
+    margin-top: 6px;
+    padding: 6px 9px;
+    background: #fff4e0;
+    border-left: 3px solid #e8a33d;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #8a5a12;
+    line-height: 1.45;
+  }
+
   /* หน้างานอื่นที่ไปวิ่งเสริมได้ (2026-08-11) - แถบส้มด้านซ้าย ให้เห็นชัดว่าไม่ใช่งานที่จัดคิวให้ตัวเอง */
   .trip-job-card.other-job-card { border-left: 4px solid #e8a33d; background: #fffdf7; }
   .other-job-toggle {
@@ -1016,6 +1029,7 @@
       <label>หน้างานที่เลือก</label>
       <div id="driver-log-selected-site" style="font-weight:600;"></div>
       <div id="driver-log-selected-material" class="hint"></div>
+      <div id="driver-log-selected-note" class="job-note-badge" style="display:none;"></div>
       <div id="driver-log-selected-progress" class="hint"></div>
     </div>
     <div class="field">
@@ -3317,6 +3331,7 @@
           <div>🚧 ${escapeHtml(job.site)}</div>
           ${job.material ? `<div class="trip-job-progress">🪨 ${escapeHtml(job.material)}</div>` : ''}
           <div class="trip-job-progress">วิ่งไปแล้ว ${job.loggedSoFar} / ${job.target} ${escapeHtml(job.unit || 'เที่ยว')}</div>
+          ${job.jobNote ? `<div class="job-note-badge">📣 ${escapeHtml(job.jobNote)}</div>` : ''}
         `;
         card.addEventListener('click', () => { if (selectedTripJobIdx === idx) deselectTripJob(); else selectTripJob(idx); }); // แตะการ์ดที่เลือกอยู่ซ้ำ -> ยกเลิกเลือก ซ่อนการ์ดแก้ไข
         container.appendChild(card);
@@ -3424,6 +3439,10 @@
       + (selectedTripJob.isOtherJob ? ' (วิ่งเสริม - ไม่ได้จัดคิวให้รถคุณ)' : '');
     document.getElementById('driver-log-selected-material').textContent =
       selectedTripJob.material ? '🪨 ' + selectedTripJob.material : '';
+    // หมายเหตุจากฝ่ายจัดคิวของหน้างานนี้ (2026-08-11) - แสดงในการ์ดที่เลือกด้วย ไม่ใช่แค่ในลิสต์ กันคนขับเลื่อนผ่านไปแล้วไม่เห็น
+    const selNoteEl = document.getElementById('driver-log-selected-note');
+    selNoteEl.textContent = selectedTripJob.jobNote ? '📣 หมายเหตุจากฝ่ายจัดคิว: ' + selectedTripJob.jobNote : '';
+    selNoteEl.style.display = selectedTripJob.jobNote ? '' : 'none';
     const unitLabel = selectedTripJob.unit || 'เที่ยว';
     document.getElementById('driver-log-unit-select').value = unitLabel; // ค่าเริ่มต้นตามใบเบิก - คนขับเปลี่ยนเองได้ถ้าวิ่งจริงเป็นหน่วยอื่น
     document.getElementById('driver-log-selected-progress').textContent = selectedTripJob.isStatusJob
